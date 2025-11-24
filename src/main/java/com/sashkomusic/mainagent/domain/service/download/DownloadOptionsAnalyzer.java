@@ -1,0 +1,158 @@
+package com.sashkomusic.mainagent.domain.service.download;
+
+import com.sashkomusic.mainagent.ai.service.AiService;
+import com.sashkomusic.mainagent.domain.model.DownloadOption;
+import com.sashkomusic.mainagent.domain.model.MusicSearchMetadata;
+import com.sashkomusic.mainagent.domain.service.MusicMetadataService;
+import com.sashkomusic.mainagent.domain.service.SearchContextService;
+import lombok.RequiredArgsConstructor;
+import org.jetbrains.annotations.NotNull;
+import org.springframework.stereotype.Component;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Component
+@RequiredArgsConstructor
+public class DownloadOptionsAnalyzer {
+
+    private final AiService aiService;
+    private final SearchContextService contextService;
+    private final MusicMetadataService musicMetadataService;
+
+    public record OptionReport(
+            DownloadOption option,
+            Suitability suitability
+    ) {
+    }
+
+    public record AnalysisResult(
+            java.util.List<OptionReport> reports,
+            String aiSummary
+    ) {
+    }
+
+    public AnalysisResult analyzeAll(java.util.List<DownloadOption> options, String releaseId) {
+        if (options.isEmpty()) {
+            return new AnalysisResult(java.util.List.of(), "");
+        }
+
+        var metadata = contextService.getReleaseMetadata(releaseId);
+        if (metadata == null) {
+            return new AnalysisResult(java.util.List.of(), "");
+        }
+
+        final var enrichedMetadata = updateMetadataWithTracks(releaseId, metadata);
+        var reports = options.stream()
+                .map(opt -> new OptionReport(opt, resolveSuitabilityLevel(opt, enrichedMetadata)))
+                .sorted(Comparator.comparing(OptionReport::suitability))
+                .toList();
+
+        var sortedOptions = reports.stream()
+                .map(OptionReport::option)
+                .toList();
+
+        StringBuilder optionsText = buildOptionsText(sortedOptions);
+        String tracklist = String.join("\n", enrichedMetadata.trackTitles());
+
+        String aiSummary = aiService.analyzeBatch(
+                enrichedMetadata.artist(),
+                enrichedMetadata.title(),
+                tracklist,
+                optionsText.toString()
+        );
+
+        return new AnalysisResult(reports, aiSummary);
+    }
+
+    @NotNull
+    private MusicSearchMetadata updateMetadataWithTracks(String releaseId, MusicSearchMetadata metadata) {
+        if (metadata.trackTitles() == null || metadata.trackTitles().isEmpty()) {
+            var tracks = musicMetadataService.getTracks(releaseId);
+            var metadataWithTracks = metadata.withTracks(tracks);
+            contextService.saveReleaseMetadata(metadataWithTracks);
+            return metadataWithTracks;
+        } else {
+            return metadata;
+        }
+    }
+
+    @NotNull
+    private static StringBuilder buildOptionsText(List<DownloadOption> options) {
+        StringBuilder optionsText = new StringBuilder();
+        for (int i = 0; i < options.size(); i++) {
+            optionsText.append("Option ").append(i + 1).append(":\n");
+            optionsText.append(extractTracklist(options.get(i)));
+            optionsText.append("\n\n");
+        }
+        return optionsText;
+    }
+
+
+    @NotNull
+    private static String extractTracklist(DownloadOption option) {
+        return option.files().stream()
+                .map(DownloadOption.FileItem::filename)
+                .collect(Collectors.joining("\n"));
+    }
+
+    private Suitability resolveSuitabilityLevel(DownloadOption option, MusicSearchMetadata expected) {
+        boolean isLossless = isLossless(option);
+        long diff = calculateTrackCountDiff(option, expected);
+
+        if (isLossless && diff == 0) {
+            return Suitability.PERFECT;
+        } else if (isLossless && diff > 0) {
+            return Suitability.GOOD;
+        } else if (Math.abs(diff) <= 2 || !isLossless) {
+            return Suitability.WARNING;
+        } else {
+            return Suitability.BAD;
+        }
+    }
+
+    private boolean isLossless(DownloadOption option) {
+        long audioCount = option.files().stream().filter(f -> isAudio(f.filename())).count();
+        if (audioCount == 0) return false;
+
+        long losslessCount = option.files().stream()
+                .filter(f -> isHighQualityFile(f.filename()))
+                .count();
+
+        return (double) losslessCount / audioCount > 0.9;
+    }
+
+    private long calculateTrackCountDiff(DownloadOption option, MusicSearchMetadata expected) {
+        long audioFilesCount = option.files().stream()
+                .filter(f -> isAudio(f.filename()))
+                .count();
+        return audioFilesCount - expected.minTracks();
+    }
+
+    private boolean isHighQualityFile(String name) {
+        String lower = name.toLowerCase();
+        return lower.endsWith(".flac") || lower.endsWith(".wav") || lower.endsWith(".aiff") || lower.endsWith(".alac");
+    }
+
+    private boolean isAudio(String name) {
+        String lower = name.toLowerCase();
+        return lower.endsWith(".mp3") || lower.endsWith(".flac") ||
+                lower.endsWith(".wav") || lower.endsWith(".m4a") ||
+                lower.endsWith(".aac") || lower.endsWith(".ogg") ||
+                lower.endsWith(".alac") || lower.endsWith(".aiff");
+    }
+
+    public enum Suitability {
+        PERFECT("💎"),
+        GOOD("🟢"),
+        WARNING("🟡"),
+        BAD("🔴");
+
+        public final String icon;
+
+        Suitability(String icon) {
+            this.icon = icon;
+        }
+    }
+}

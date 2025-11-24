@@ -12,13 +12,6 @@ public record MusicBrainzSearchResponse(
 
 ) {
 
-    public int getMinTrackCount() {
-        return releases.stream()
-                .map(Release::trackCount)
-                .min(Integer::compareTo)
-                .get();
-    }
-
     public record Release(
             String id,
             int score,
@@ -152,7 +145,23 @@ public record MusicBrainzSearchResponse(
             Integer discCount,
 
             @JsonProperty("track-count")
-            Integer trackCount
+            Integer trackCount,
+
+            List<Track> tracks
+    ) {
+    }
+
+    public record Track(
+            String id,
+            String title,
+            int position,
+            Recording recording
+    ) {
+    }
+
+    public record Recording(
+            String id,
+            String title
     ) {
     }
 

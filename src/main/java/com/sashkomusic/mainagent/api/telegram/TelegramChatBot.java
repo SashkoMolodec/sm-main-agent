@@ -1,34 +1,40 @@
 package com.sashkomusic.mainagent.api.telegram;
 
-import com.sashkomusic.mainagent.ai.service.AiService;
-import com.sashkomusic.mainagent.domain.service.MusicMetadataService;
-import com.sashkomusic.mainagent.messaging.consumer.SearchFilesTaskProducer;
-import com.sashkomusic.mainagent.messaging.dto.SearchFilesTaskDto;
+import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.service.UserInteractionOrchestrator;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 @Component
+@Slf4j
 public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
-    private final AiService aiService;
-    private final MusicMetadataService musicMetadataService;
-    private final SearchFilesTaskProducer searchFilesTaskProducer;
+    private final UserInteractionOrchestrator orchestrator;
     private final TelegramClient client;
     private final String botToken;
 
-    public TelegramChatBot(@Value("${telegram.bot.token}") String token, AiService aiService, MusicMetadataService musicMetadataService, SearchFilesTaskProducer searchFilesTaskProducer) {
+    public TelegramChatBot(@Value("${telegram.bot.token}") String token, UserInteractionOrchestrator orchestrator) {
         botToken = token;
-        this.aiService = aiService;
-        this.musicMetadataService = musicMetadataService;
-        this.searchFilesTaskProducer = searchFilesTaskProducer;
         client = new OkHttpTelegramClient(botToken);
+        this.orchestrator = orchestrator;
     }
 
     @Override
@@ -43,29 +49,99 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
 
     @Override
     public void consume(Update update) {
-        if (update.hasMessage() && update.getMessage().hasText()) {
-            String input = update.getMessage().getText();
-            var chatId = update.getMessage().getChatId();
+        try {
+            if (update.hasMessage() && update.getMessage().hasText()) {
+                var text = update.getMessage().getText();
+                var chatId = update.getMessage().getChatId();
+                log.info("📩 Text from [{}]: {}", chatId, text);
 
-            var query = aiService.extractSearchQuery(input);
-            var metadata = musicMetadataService.search(query.artist(), query.title());
+                orchestrator.handleUserRequest(chatId, text)
+                        .forEach(res -> sendResponse(chatId, res));
 
-            searchFilesTaskProducer.send(SearchFilesTaskDto.of(chatId, metadata.artist(), metadata.title()));
+            } else if (update.hasCallbackQuery()) {
+                var callback = update.getCallbackQuery();
+                var data = callback.getData();
+                var chatId = callback.getMessage().getChatId();
+                var queryId = callback.getId();
 
-            var chatBotResponse = "Found %d different releases for title: %s, artist: %s. Querying sources...".formatted(
-                    metadata.releasesFound(),
-                    query.title(), query.artist());
+                log.info("👆 Click from [{}]: {}", chatId, data);
+                answerCallback(queryId);
 
-            SendMessage message = SendMessage
-                    .builder()
-                    .chatId(chatId)
-                    .text(chatBotResponse)
-                    .build();
-            try {
-                client.execute(message);
-            } catch (TelegramApiException e) {
-                e.printStackTrace();
+                orchestrator.handleCallback(chatId, data)
+                        .forEach(response -> sendResponse(chatId, response));
             }
+        } catch (Exception e) {
+            log.error("Unexpected error in consumer: ", e);
+        }
+    }
+
+    public void sendResponse(long chatId, BotResponse response) {
+        var keyboardMarkup = createKeyboard(response.buttons());
+        boolean hasImage = response.imageUrl() != null && !response.imageUrl().isBlank();
+
+        if (hasImage) {
+            try {
+                SendPhoto photo = SendPhoto.builder()
+                        .chatId(chatId)
+                        .photo(new InputFile(response.imageUrl()))
+                        .caption(response.text())
+                        .parseMode("Markdown")
+                        .replyMarkup(keyboardMarkup)
+                        .build();
+                client.execute(photo);
+                return;
+
+            } catch (TelegramApiException e) {
+                log.warn("⚠️ Failed to send photo to [{}]. URL: {}. Error: {}",
+                        chatId, response.imageUrl(), e.getMessage());
+            }
+        }
+
+        try {
+            SendMessage message = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(response.text())
+                    .parseMode("Markdown")
+                    .replyMarkup(keyboardMarkup)
+                    .build();
+            client.execute(message);
+        } catch (TelegramApiException e) {
+            log.error("❌ Failed to send text message to [{}]: {}", chatId, e.getMessage());
+        }
+    }
+
+    public void sendMessage(long chatId, String text) {
+        sendResponse(chatId, BotResponse.text(text));
+    }
+
+    private InlineKeyboardMarkup createKeyboard(Map<String, String> buttons) {
+        if (buttons == null || buttons.isEmpty()) {
+            return null;
+        }
+
+        List<InlineKeyboardButton> rowButtons = new ArrayList<>();
+        for (var entry : buttons.entrySet()) {
+            String label = entry.getKey();
+            String value = entry.getValue();
+            var buttonBuilder = InlineKeyboardButton.builder().text(label);
+
+            if (value.startsWith("URL:")) {
+                buttonBuilder.url(value.substring(4));
+            } else {
+                buttonBuilder.callbackData(value);
+            }
+            rowButtons.add(buttonBuilder.build());
+        }
+        return new InlineKeyboardMarkup(List.of(new InlineKeyboardRow(rowButtons)));
+    }
+
+    private void answerCallback(String queryId) {
+        try {
+            client.execute(AnswerCallbackQuery.builder()
+                    .callbackQueryId(queryId)
+                    .build());
+        } catch (TelegramApiException e) {
+            log.warn("⚠️ Could not answer callback: {}", e.getMessage());
         }
     }
 }

@@ -1,0 +1,124 @@
+GET http://localhost:8082/slskd/health
+
+###
+
+GET http://localhost:8082/slskd/application
+
+###
+
+POST http://localhost:8082/search
+Content-Type: application/json
+
+{
+  "artist": "nthng",
+  "release": "Hypnotherapy"
+}
+
+###
+GET http://localhost:5030/api/v0/application
+X-API-KEY: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
+
+###
+
+# curl http://localhost:5030/health
+GET http://localhost:5030/health
+
+# curl -X POST http://localhost:5030/api/v0/searches
+#  -H "Content-Type: application/json"
+#  -H "X-API-Key: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi"
+#  -d '{
+#    "searchText": "Introversion Laika",
+#    "filterResponses": true,
+#    "maximumPeerQueueLength": 1000000,
+#    "minimumPeerUploadSpeed": 0,
+#    "minimumResponseFileCount": 1,
+#    "responseLimit": 100,
+#    "searchTimeout": 15000
+#  }'
+###
+
+POST http://localhost:5030/api/v0/searches
+X-API-Key: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
+Content-Type: application/json
+
+{
+  "searchText": "nthng",
+  "filterResponses": true,
+  "maximumPeerQueueLength": 1000000,
+  "minimumPeerUploadSpeed": 0,
+  "minimumResponseFileCount": 1,
+  "responseLimit": 100,
+  "searchTimeout": 15000
+}
+
+###
+
+# curl -X GET "http://localhost:5030/api/v0/searches/$SEARCH_ID"
+GET http://localhost:5030/api/v0/searches/0297101d-3cc2-4157-835f-26dbcea86c3e/responses
+X-API-Key: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
+
+###
+
+GET http://localhost:5030/api/v0/searches/7350e2e5-b4b1-470e-924b-65c61c6d5edd/responses
+X-API-KEY: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
+
+###
+
+# curl -X POST http://localhost:8080/webhooks/slskd/search-complete
+#  -H "Content-Type: application/json"
+#  -H "X-API-Key: your_webhook_secret"
+#  -d '{
+#    "id": "550e8400-e29b-41d4-a716-446655440001",
+#    "timestamp": "2024-11-11T20:30:00Z",
+#    "version": 0,
+#    "type": "SearchComplete",
+#    "searchText": "Introversion Laikaa",
+#    "token": "abc123def456",
+#    "fileCount": 42,
+#    "responseCount": 5
+#  }'
+POST http://localhost:8082/soulseek/search-completed
+Content-Type: application/json
+
+{
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "timestamp": "2024-11-11T20:30:00Z",
+  "version": 0,
+  "type": "SearchComplete",
+  "searchText": "Introversion Laikaa",
+  "token": "abc123def456",
+  "fileCount": 42,
+  "responseCount": 5
+}
+
+###
+
+GET https://musicbrainz.org/ws/2/release/?query=artist:Daft Punk%20AND%20release:Random Access Memories&fmt=json
+
+###
+
+
+GET https://musicbrainz.org/ws/2/release/?query=artist:nthng AND release:Hypnotherapy&fmt=json
+
+
+###
+
+GET https://musicbrainz.org/ws/2/release/?query=/release?query=artist:"A$AP Rocky" AND release:"Testing"&fmt=json
+
+###
+GET https://musicbrainz.org/ws/2/release?query=artist:"A$AP Rocky" AND release:"Testing"&fmt=json
+
+
+###
+GET https://musicbrainz.org/ws/2/release/?query=/release?query=artist:"Tiga" AND release:"Non Stop"&fmt=json
+
+###
+GET https://musicbrainz.org/ws/2/release?query=artist:"jeff mills" AND release:""&fmt=json&limit=100&offset=0
+
+
+###
+GET https://musicbrainz.org/ws/2/release?query=artist:"Jeff Mills" AND date:[2020 TO 2025]&fmt=json&limit=100&offset=0
+
+
+###
+GET https://musicbrainz.org/ws/2/release?query=recording:"Simulant"&fmt=json
