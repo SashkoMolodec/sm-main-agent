@@ -2,9 +2,9 @@ package com.sashkomusic.mainagent.domain.service.download;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
-import com.sashkomusic.mainagent.domain.model.MusicSearchMetadata;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.service.MusicMetadataService;
-import com.sashkomusic.mainagent.domain.service.SearchContextService;
+import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Component;
@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 public class DownloadOptionsAnalyzer {
 
     private final AiService aiService;
-    private final SearchContextService contextService;
+    private final SearchContextHolder contextService;
     private final MusicMetadataService musicMetadataService;
 
     public record OptionReport(
@@ -67,7 +67,7 @@ public class DownloadOptionsAnalyzer {
     }
 
     @NotNull
-    private MusicSearchMetadata updateMetadataWithTracks(String releaseId, MusicSearchMetadata metadata) {
+    private ReleaseMetadata updateMetadataWithTracks(String releaseId, ReleaseMetadata metadata) {
         if (metadata.trackTitles() == null || metadata.trackTitles().isEmpty()) {
             var tracks = musicMetadataService.getTracks(releaseId);
             var metadataWithTracks = metadata.withTracks(tracks);
@@ -97,7 +97,7 @@ public class DownloadOptionsAnalyzer {
                 .collect(Collectors.joining("\n"));
     }
 
-    private Suitability resolveSuitabilityLevel(DownloadOption option, MusicSearchMetadata expected) {
+    private Suitability resolveSuitabilityLevel(DownloadOption option, ReleaseMetadata expected) {
         boolean isLossless = isLossless(option);
         long diff = calculateTrackCountDiff(option, expected);
 
@@ -123,7 +123,7 @@ public class DownloadOptionsAnalyzer {
         return (double) losslessCount / audioCount > 0.9;
     }
 
-    private long calculateTrackCountDiff(DownloadOption option, MusicSearchMetadata expected) {
+    private long calculateTrackCountDiff(DownloadOption option, ReleaseMetadata expected) {
         long audioFilesCount = option.files().stream()
                 .filter(f -> isAudio(f.filename()))
                 .count();

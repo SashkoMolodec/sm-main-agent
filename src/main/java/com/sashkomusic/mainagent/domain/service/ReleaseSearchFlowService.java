@@ -2,7 +2,9 @@ package com.sashkomusic.mainagent.domain.service;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
-import com.sashkomusic.mainagent.domain.model.MusicSearchMetadata;
+import com.sashkomusic.mainagent.domain.model.Language;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.model.SearchRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,38 +22,34 @@ public class ReleaseSearchFlowService {
 
     private final AiService analyzer;
     private final MusicMetadataService musicMetadataService;
-    private final SearchContextService contextService;
+    private final SearchContextHolder contextService;
 
     public List<BotResponse> search(long chatId, String rawInput) {
-        var query = analyzer.buildMusicBrainzSearchQuery(rawInput);
+        var searchRequest = analyzer.buildSearchRequest(rawInput);
 
-        var releases = musicMetadataService.searchReleases(query);
+        var releases = musicMetadataService.searchReleases(searchRequest.luceneQuery());
         if (releases.isEmpty()) {
-            String artist = extractFieldFromQuery(query, "artist");
-            String title = extractFieldFromQuery(query, "release");
-            if (title.isEmpty()) {
-                title = extractFieldFromQuery(query, "recording");
-            }
-
-            var buttons = buildSearchButtons(artist, title);
+            var buttons = buildSearchButtons(searchRequest);
             return List.of(BotResponse.withButtons("😔 нич не знайшов в musicbrainz", buttons));
         }
-        contextService.saveSearchResults(chatId, releases);
 
-        return generatePageResponse(releases, 0);
+        contextService.saveSearchResults(chatId, searchRequest, releases);
+
+        return generatePageResponse(releases, searchRequest, 0);
     }
 
     public List<BotResponse> handlePagination(long chatId, int page) {
         var releases = contextService.getSearchResults(chatId);
+        var searchRequest = contextService.getSearchRequest(chatId);
 
-        if (releases == null || releases.isEmpty()) {
+        if (sessionOutdated(releases, searchRequest)) {
             return List.of(BotResponse.text("⚠️ сесія пошуку застаріла. зробіть новий запит."));
         }
 
-        return generatePageResponse(releases, page);
+        return generatePageResponse(releases, searchRequest, page);
     }
 
-    private List<BotResponse> generatePageResponse(List<MusicSearchMetadata> releases, int page) {
+    private List<BotResponse> generatePageResponse(List<ReleaseMetadata> releases, SearchRequest searchRequest, int page) {
         List<BotResponse> responses = new ArrayList<>();
 
         int start = page * PAGE_SIZE;
@@ -73,7 +71,7 @@ public class ReleaseSearchFlowService {
         return responses;
     }
 
-    private static BotResponse buildReleaseCard(MusicSearchMetadata release) {
+    private static BotResponse buildReleaseCard(ReleaseMetadata release) {
         String cardText = """
                 💿 %s
                 👤 %s
@@ -86,7 +84,10 @@ public class ReleaseSearchFlowService {
                 release.getTrackCountDisplay()
         ).toLowerCase();
 
-        Map<String, String> buttons = buildSearchButtons(release.artist(), release.title());
+        Map<String, String> buttons = new LinkedHashMap<>();
+        addYoutubeButton(buttons, release.getYoutubeUrl());
+        addDiscogsButton(buttons, release.getDiscogsUrl());
+        addBandcampButton(buttons, release.getBandcampUrl());
         buttons.put("⬇️", "DL:" + release.id());
 
         return BotResponse.card(
@@ -95,7 +96,7 @@ public class ReleaseSearchFlowService {
                 buttons);
     }
 
-    private static BotResponse buildPageNavigation(List<MusicSearchMetadata> releases, int page, int end) {
+    private static BotResponse buildPageNavigation(List<ReleaseMetadata> releases, int page, int end) {
         int nextPage = page + 1;
         int remaining = releases.size() - end;
 
@@ -106,7 +107,7 @@ public class ReleaseSearchFlowService {
         return BotResponse.withButtons(navText, navButtons);
     }
 
-    private static String resolveFoundReleasesMessage(List<MusicSearchMetadata> releases, int page) {
+    private static String resolveFoundReleasesMessage(List<ReleaseMetadata> releases, int page) {
         if (page == 0) {
             if (releases.size() == 1) {
                 return "🔎 знайдено реліз";
@@ -117,39 +118,27 @@ public class ReleaseSearchFlowService {
         }
     }
 
-    private static Map<String, String> buildSearchButtons(String artist, String title) {
+    private static Map<String, String> buildSearchButtons(SearchRequest searchRequest) {
         Map<String, String> buttons = new LinkedHashMap<>();
-        buttons.put("📺", "URL:" + buildYoutubeUrl(artist, title));
-        buttons.put("💿", "URL:" + buildDiscogsUrl(artist, title));
-        buttons.put("📼", "URL:" + buildBandcampUrl(artist, title));
+        addYoutubeButton(buttons, searchRequest.getYoutubeUrl());
+        addDiscogsButton(buttons, searchRequest.getDiscogsUrl());
+        addBandcampButton(buttons, searchRequest.getBandcampUrl());
         return buttons;
     }
 
-    private static String buildYoutubeUrl(String artist, String title) {
-        String query = artist + " " + title + " full album";
-        return "https://www.youtube.com/results?search_query=" + encode(query);
+    private static void addYoutubeButton(Map<String, String> buttons, String url) {
+        buttons.put("📺", "URL:" + url);
     }
 
-    private static String buildDiscogsUrl(String artist, String title) {
-        String query = artist + " " + title;
-        return "https://www.discogs.com/search/?q=" + encode(query) + "&type=release";
+    private static void addDiscogsButton(Map<String, String> buttons, String url) {
+        buttons.put("💿", "URL:" + url);
     }
 
-    private static String buildBandcampUrl(String artist, String title) {
-        String query = artist + " " + title;
-        return "https://bandcamp.com/search?q=" + encode(query);
+    private static void addBandcampButton(Map<String, String> buttons, String url) {
+        buttons.put("📼", "URL:" + url);
     }
 
-    private static String encode(String value) {
-        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
-    }
-
-    private static String extractFieldFromQuery(String query, String fieldName) {
-        var pattern = java.util.regex.Pattern.compile(fieldName + ":\"([^\"]+)\"");
-        var matcher = pattern.matcher(query);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        return "";
+    private static boolean sessionOutdated(List<ReleaseMetadata> releases, SearchRequest searchRequest) {
+        return releases == null || releases.isEmpty() || searchRequest == null;
     }
 }

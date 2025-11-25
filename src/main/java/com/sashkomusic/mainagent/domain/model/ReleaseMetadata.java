@@ -1,10 +1,10 @@
 package com.sashkomusic.mainagent.domain.model;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import com.sashkomusic.mainagent.domain.util.SearchUrlUtils;
+
 import java.util.List;
 
-public record MusicSearchMetadata(
+public record ReleaseMetadata(
         String id,
         String releaseGroupId,
         String artist,
@@ -51,8 +51,25 @@ public record MusicSearchMetadata(
         return String.join(", ", types);
     }
 
-    public MusicSearchMetadata withTracks(List<String> tracks) {
-        return new MusicSearchMetadata(
+    public String getYoutubeUrl() {
+        Language language = SearchUrlUtils.detectLanguage(artist, title);
+        String albumWord = SearchUrlUtils.buildYoutubeAlbumWord(language);
+        String query = artist + " " + title + " " + albumWord;
+        return "https://www.youtube.com/results?search_query=" + SearchUrlUtils.encode(query);
+    }
+
+    public String getDiscogsUrl() {
+        String query = artist + " " + title;
+        return "https://www.discogs.com/search/?q=" + SearchUrlUtils.encode(query);
+    }
+
+    public String getBandcampUrl() {
+        String query = artist + " " + title;
+        return "https://bandcamp.com/search?q=" + SearchUrlUtils.encode(query);
+    }
+
+    public ReleaseMetadata withTracks(List<String> tracks) {
+        return new ReleaseMetadata(
                 this.id,
                 this.releaseGroupId,
                 this.artist,

@@ -1,6 +1,7 @@
 package com.sashkomusic.mainagent.ai.service;
 
 import com.sashkomusic.mainagent.domain.model.MusicSearchQuery;
+import com.sashkomusic.mainagent.domain.model.SearchRequest;
 import com.sashkomusic.mainagent.domain.model.UserIntent;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
@@ -53,7 +54,7 @@ public interface AiService {
 
     @SystemMessage("""
         You are an Advanced Search Query Builder for MusicBrainz API (Lucene syntax).
-        Convert the user's natural language request into a precise Lucene query string.
+        Convert the user's natural language request into a structured SearchRequest.
 
         AVAILABLE FIELDS:
         - artist:"Name"        (Exact match, e.g. "Daft Punk")
@@ -71,7 +72,7 @@ public interface AiService {
 
         RULES:
         1. ALWAYS wrap multi-word values in double quotes (e.g. artist:"Daft Punk").
-        2. Combine conditions with AND.
+        2. Combine conditions with AND in luceneQuery field.
         3. IGNORE words like "latest", "new", "best", "find" (sorting is handled by code).
         4. **CRITICAL: NEVER translate, transliterate, or change artist names or release titles in ANY way.**
            - Keep EXACT original spelling byte-for-byte
@@ -90,33 +91,51 @@ public interface AiService {
            - "German techno" -> tag:techno AND country:DE
         7. DEFAULT: If no type specified by user, assume (primarytype:Album OR primarytype:EP).
         8. GENRES/TAGS: You can translate genre names to English for the 'tag' field (e.g., "дарк ембієнт" -> tag:"dark ambient").
-        9. OUTPUT: Return ONLY the raw query string. No markdown.
+
+        OUTPUT STRUCTURE:
+        - id: null (will be generated later)
+        - artist: extracted artist name (WITHOUT quotes, empty string if not found)
+        - album: extracted release/album title (WITHOUT quotes, empty string if not found)
+        - recording: extracted recording/track title (WITHOUT quotes, empty string if not found)
+        - language: detected language of the user query (UA for Ukrainian, EN for English)
+        - luceneQuery: complete Lucene query string with all conditions
+
+        LANGUAGE DETECTION:
+        - If query contains Cyrillic Ukrainian characters (і, ї, є) or Ukrainian words -> UA
+        - If query is in English -> EN
+        - Default to EN if uncertain
 
         EXAMPLES:
         User: "albums by Daft Punk 2013"
-        Output: artist:"Daft Punk" AND date:2013 AND primarytype:Album
-
-        User: "japanese vinyls by Jeff Mills"
-        Output: artist:"Jeff Mills" AND country:JP AND format:"Vinyl"
-
-        User: "detroit techno from 90s"
-        Output: tag:"detroit techno" AND date:[1990 TO 1999] AND (primarytype:Album OR primarytype:EP)
-
-        User: "Tresor catalog number 11"
-        Output: label:"Tresor" AND catno:"11"
-
-        User: "french house singles 2000-2005"
-        Output: tag:"french house" AND date:[2000 TO 2005] AND primarytype:Single
-
-        User: "альбоми ДахаБраха"
-        Output: artist:"ДахаБраха" AND primarytype:Album
+        Output: {
+          "id": null,
+          "artist": "Daft Punk",
+          "album": "",
+          "recording": "",
+          "language": "EN",
+          "luceneQuery": "artist:\\"Daft Punk\\" AND date:2013 AND primarytype:Album"
+        }
 
         User: "Онука 2014"
-        Output: artist:"Онука" AND date:2014 AND (primarytype:Album OR primarytype:EP)
+        Output: {
+          "id": null,
+          "artist": "Онука",
+          "album": "",
+          "recording": "",
+          "language": "UA",
+          "luceneQuery": "artist:\\"Онука\\" AND date:2014 AND (primarytype:Album OR primarytype:EP)"
+        }
 
-        User: "Паліндром альбоми"
-        Output: artist:"Паліндром" AND primarytype:Album
+        User: "Паліндром альбом Хвороба"
+        Output: {
+          "id": null,
+          "artist": "Паліндром",
+          "album": "Хвороба",
+          "recording": "",
+          "language": "UA",
+          "luceneQuery": "artist:\\"Паліндром\\" AND release:\\"Хвороба\\" AND primarytype:Album"
+        }
         """)
     @UserMessage("{{it}}")
-    String buildMusicBrainzSearchQuery(String userPrompt);
+    SearchRequest buildSearchRequest(String userPrompt);
 }

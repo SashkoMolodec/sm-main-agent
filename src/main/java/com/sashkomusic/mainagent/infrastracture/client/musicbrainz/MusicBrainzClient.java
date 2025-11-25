@@ -1,6 +1,6 @@
 package com.sashkomusic.mainagent.infrastracture.client.musicbrainz;
 
-import com.sashkomusic.mainagent.domain.model.MusicSearchMetadata;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.service.MusicMetadataService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +27,7 @@ public class MusicBrainzClient implements MusicMetadataService {
 
     @Override
     @Retryable(retryFor = SearchNotCompleteException.class, maxAttempts = 3, backoff = @Backoff(delay = 5000))
-    public List<MusicSearchMetadata> searchReleases(String query) {
+    public List<ReleaseMetadata> searchReleases(String query) {
         log.info("Searching with query: {}", query);
 
         try {
@@ -53,7 +53,7 @@ public class MusicBrainzClient implements MusicMetadataService {
         }
     }
 
-    private List<MusicSearchMetadata> mapToGroupedDomain(List<MusicBrainzSearchResponse.Release> releases) {
+    private List<ReleaseMetadata> mapToGroupedDomain(List<MusicBrainzSearchResponse.Release> releases) {
         Map<String, List<MusicBrainzSearchResponse.Release>> grouped = releases.stream()
                 .filter(r -> r.releaseGroup() != null)
                 .collect(Collectors.groupingBy(r -> r.releaseGroup().id()));
@@ -62,11 +62,11 @@ public class MusicBrainzClient implements MusicMetadataService {
                 .map(this::aggregateGroup)
                 .sorted(
                         // 1. Рік: від новіших до старіших (DESC)
-                        Comparator.comparing((MusicSearchMetadata m) -> m.years().isEmpty() ? "0000" : m.years().getFirst()).reversed()
+                        Comparator.comparing((ReleaseMetadata m) -> m.years().isEmpty() ? "0000" : m.years().getFirst()).reversed()
 
                                 // 2. Score: від більшого до меншого (DESC)
                                 // Важливо: ми передаємо компаратор всередину thenComparing!
-                                .thenComparing(Comparator.comparingInt(MusicSearchMetadata::score).reversed())
+                                .thenComparing(Comparator.comparingInt(ReleaseMetadata::score).reversed())
 
                                 // 3. Назва: від коротшої до довшої (ASC)
                                 .thenComparingInt(r -> r.title().length())
@@ -80,7 +80,7 @@ public class MusicBrainzClient implements MusicMetadataService {
         } else return 1;
     }
 
-    private MusicSearchMetadata aggregateGroup(List<MusicBrainzSearchResponse.Release> groupReleases) {
+    private ReleaseMetadata aggregateGroup(List<MusicBrainzSearchResponse.Release> groupReleases) {
         IntSummaryStatistics trackStats = groupReleases.stream()
                 .mapToInt(this::getTrackCount)
                 .filter(c -> c > 0)
@@ -109,7 +109,7 @@ public class MusicBrainzClient implements MusicMetadataService {
                         .thenComparingInt(r -> r.title().length()))
                 .orElse(groupReleases.getFirst());
 
-        return new MusicSearchMetadata(
+        return new ReleaseMetadata(
                 representative.id(),
                 representative.releaseGroup().id(),
                 getArtistName(representative),
