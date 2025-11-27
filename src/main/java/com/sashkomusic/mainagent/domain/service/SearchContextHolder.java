@@ -23,7 +23,7 @@ public class SearchContextHolder {
     private List<DownloadOptionsAnalyzer.OptionReport> downloadOptionReports = new ArrayList<>();
     @Getter
     @Setter
-    private String currentReleaseId; // For future library agent integration
+    private String chosenReleaseForDownload;
 
     public ReleaseMetadata getReleaseMetadata(String releaseId) {
         return releaseMetadata.get(releaseId);

@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -59,7 +60,7 @@ public class MusicDownloadFlowService {
         var analysisResult = analyzer.analyzeAll(dto.results(), dto.releaseId());
         var reports = analysisResult.reports();
         contextService.setDownloadOptionReports(reports);
-        contextService.setCurrentReleaseId(dto.releaseId());
+        contextService.setChosenReleaseForDownload(dto.releaseId());
 
         reports.forEach(r -> log.info("{}", r));
         return formatter.format(reports, analysisResult.aiSummary());
@@ -78,20 +79,23 @@ public class MusicDownloadFlowService {
 
         var chosenReport = reports.get(optionNumber - 1);
         var option = chosenReport.option();
-        String releaseId = contextService.getCurrentReleaseId();
+        String releaseId = contextService.getChosenReleaseForDownload();
 
         log.info("User chose option #{}: {} from {}", optionNumber, option.id(), option.distributorName());
 
         downloadTaskProducer.send(DownloadFilesTaskDto.of(chatId, releaseId, option));
 
-        return List.of(BotResponse.text(
-                "✅ **ок, качаю:**\n%s - %s\n📦 %d файлів, %d MB"
-                        .formatted(
-                                option.distributorName(),
-                                option.sourceName(),
-                                option.files().size(),
-                                option.totalSize()
-                        )
+        String message = "✅ **ок, качаю:**\n%s - %s\n📦 %d файлів, %d MB"
+                .formatted(
+                        option.distributorName(),
+                        option.sourceName(),
+                        option.files().size(),
+                        option.totalSize()
+                );
+
+        return List.of(BotResponse.withButtons(
+                message,
+                Map.of("📊 переглянути статус", "URL:http://localhost:5030/downloads/")
         ));
     }
 }
