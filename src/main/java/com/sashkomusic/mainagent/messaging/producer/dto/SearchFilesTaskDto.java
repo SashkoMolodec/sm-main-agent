@@ -1,4 +1,4 @@
-package com.sashkomusic.mainagent.messaging.dto;
+package com.sashkomusic.mainagent.messaging.producer.dto;
 
 public record SearchFilesTaskDto(
         long chatId,

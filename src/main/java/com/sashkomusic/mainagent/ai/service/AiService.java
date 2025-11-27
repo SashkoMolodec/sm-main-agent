@@ -9,7 +9,40 @@ import dev.langchain4j.service.V;
 
 public interface AiService {
 
-    @SystemMessage("Analyze the user text and determine the intent. Return exactly one enum value.")
+    @SystemMessage("""
+            Analyze the user text and determine the intent. Return exactly one enum value.
+
+            Intents:
+            1. SEARCH_FOR_RELEASE - User wants to search for music (artist, album, track, year, genre, etc.)
+               Examples:
+               - "Daft Punk" (just artist name)
+               - "Онука" (just artist name in Ukrainian/other language)
+               - "Aphex Twin ambient tracks"
+               - "German techno 90s"
+               - "найди альбом Хвороба"
+               - Any unique artist/album name WITHOUT explicit download request
+
+            2. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
+               Examples:
+               - "1" (single digit is MOST LIKELY download choice)
+               - "2"
+               - "3"
+               - "перший"
+               - "second"
+               - "варіант 3"
+               - "option 2"
+
+            3. GENERAL_CHAT - Greetings, questions about bot, casual conversation
+               Examples:
+               - "hi"
+               - "how are you"
+               - "що ти вмієш?"
+               - "дякую"
+
+            4. UNKNOWN - Cannot determine intent
+
+            Default behavior: If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE
+            """)
     UserIntent classifyIntent(@UserMessage String text);
 
     @UserMessage("Extract artist and album from (empty response if not contains): {{it}}")
@@ -51,6 +84,28 @@ public interface AiService {
                         @V("album") String album,
                         @V("tracklist") String tracklist,
                         @V("options") String options);
+
+    @SystemMessage("""
+            Parse user input to extract download option number.
+            Support various formats:
+            - Just a digit: "1", "2", "3" (most common)
+            - Ukrainian words: "перший", "другий", "третій", "четвертий", "п'ятий"
+            - English words: "first", "second", "third", "fourth", "fifth"
+            - With prefix: "option 2", "варіант 3", "номер 4"
+
+            Examples:
+            "1" -> 1
+            "2" -> 2
+            "перший" -> 1
+            "другий" -> 2
+            "second" -> 2
+            "варіант 3" -> 3
+
+            Return the number as Integer (1-indexed).
+            Return null if no valid number found.
+            """)
+    @UserMessage("{{it}}")
+    Integer parseDownloadOptionNumber(String userInput);
 
     @SystemMessage("""
         You are an Advanced Search Query Builder for MusicBrainz API (Lucene syntax).

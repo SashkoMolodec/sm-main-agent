@@ -1,4 +1,4 @@
-package com.sashkomusic.mainagent.messaging.consumer;
+package com.sashkomusic.mainagent.messaging.consumer.dto;
 
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 

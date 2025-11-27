@@ -13,11 +13,23 @@ public record DownloadOption(
 ) {
     public record FileItem(
             String filename,
-            int size,
+            long size,
             Integer bitRate,
             Integer bitDepth,
             Integer sampleRate,
             int lengthSeconds
     ) {
+
+        public String displayName() {
+            if (filename == null) {
+                return null;
+            }
+
+            int lastSlash = Math.max(filename.lastIndexOf('\\'), filename.lastIndexOf('/'));
+            if (lastSlash >= 0 && lastSlash < filename.length() - 1) {
+                return filename.substring(lastSlash + 1);
+            }
+            return filename;
+        }
     }
 }

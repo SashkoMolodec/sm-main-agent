@@ -25,7 +25,8 @@ public class UserInteractionOrchestrator {
 
         return switch (intent) {
             case SEARCH_FOR_RELEASE -> releaseSearchFlowService.search(chatId, rawInput);
-            case GENERAL_CHAT, UNKNOWN -> List.of(BotResponse.text("Ше не вмію такого, сорі 😔"));
+            case CHOOSE_DOWNLOAD_OPTION -> musicDownloadFlowService.handleDownload(chatId, rawInput);
+            case GENERAL_CHAT, UNKNOWN -> List.of(BotResponse.text("шем не видів такого, сорі 😔"));
         };
     }
 

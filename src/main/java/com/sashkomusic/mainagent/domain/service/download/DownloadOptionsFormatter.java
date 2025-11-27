@@ -36,7 +36,7 @@ public class DownloadOptionsFormatter {
 
             option.files().stream()
                     .limit(7)
-                    .forEach(f -> sb.append("   📄 `%s`\n".formatted(f.filename())));
+                    .forEach(f -> sb.append("   📄 `%s`\n".formatted(f.displayName())));
 
             if (option.files().size() > 7) {
                 sb.append("   ... _та ще %d файлів_\n".formatted(option.files().size() - 7));

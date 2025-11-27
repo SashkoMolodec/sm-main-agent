@@ -1,6 +1,6 @@
 package com.sashkomusic.mainagent.messaging.producer;
 
-import com.sashkomusic.mainagent.messaging.dto.SearchFilesTaskDto;
+import com.sashkomusic.mainagent.messaging.producer.dto.SearchFilesTaskDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;

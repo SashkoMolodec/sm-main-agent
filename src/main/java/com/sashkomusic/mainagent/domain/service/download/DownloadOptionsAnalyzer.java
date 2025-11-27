@@ -93,7 +93,7 @@ public class DownloadOptionsAnalyzer {
     @NotNull
     private static String extractTracklist(DownloadOption option) {
         return option.files().stream()
-                .map(DownloadOption.FileItem::filename)
+                .map(DownloadOption.FileItem::displayName)
                 .collect(Collectors.joining("\n"));
     }
 
