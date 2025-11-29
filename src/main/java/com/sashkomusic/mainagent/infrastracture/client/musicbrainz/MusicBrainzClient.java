@@ -1,7 +1,8 @@
 package com.sashkomusic.mainagent.infrastracture.client.musicbrainz;
 
+import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.MusicMetadataService;
+import com.sashkomusic.mainagent.domain.service.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.retry.annotation.Backoff;
@@ -11,10 +12,11 @@ import org.springframework.web.client.RestClient;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Component
-public class MusicBrainzClient implements MusicMetadataService {
+public class MusicBrainzClient implements SearchEngineService {
 
     private final RestClient client;
 
@@ -27,16 +29,35 @@ public class MusicBrainzClient implements MusicMetadataService {
 
     @Override
     @Retryable(retryFor = SearchNotCompleteException.class, maxAttempts = 3, backoff = @Backoff(delay = 5000))
-    public List<ReleaseMetadata> searchReleases(String query) {
-        log.info("Searching with query: {}", query);
+    public List<ReleaseMetadata> searchReleases(MetadataSearchRequest request) {
+        boolean hasRecording = !request.recording().isEmpty();
+        boolean hasRelease = !request.release().isEmpty();
+
+        if (hasRecording && !hasRelease) {
+            log.info("Explicit track search detected, using recording endpoint");
+            return searchByRecording(request);
+        }
+
+        var results = searchByRelease(request);
+        if (results.isEmpty() && hasRecording) {
+            log.info("No results from release search, trying recording endpoint as fallback");
+            return searchByRecording(request);
+        }
+
+        return results;
+    }
+
+    private List<ReleaseMetadata> searchByRelease(MetadataSearchRequest request) {
+        String luceneQuery = toLuceneQuery(request);
+        log.info("Searching MusicBrainz release endpoint with query: {}", luceneQuery);
 
         try {
             var response = client.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/release")
-                            .queryParam("query", query)
+                            .queryParam("query", luceneQuery)
                             .queryParam("fmt", "json")
-                            .queryParam("limit", defineResponseLimit(query))
+                            .queryParam("limit", defineResponseLimit(luceneQuery))
                             .build())
                     .retrieve()
                     .body(MusicBrainzSearchResponse.class);
@@ -48,9 +69,165 @@ public class MusicBrainzClient implements MusicMetadataService {
             return mapToGroupedDomain(response.releases());
 
         } catch (Exception ex) {
-            log.error("Error searching MusicBrainz candidates: {}", ex.getMessage());
+            log.error("Error searching MusicBrainz release endpoint: {}", ex.getMessage());
             throw new SearchNotCompleteException("Search failed due to API error.");
         }
+    }
+
+    private List<ReleaseMetadata> searchByRecording(MetadataSearchRequest request) {
+        String luceneQuery = toLuceneQuery(request);
+        log.info("Searching MusicBrainz recording endpoint with query: {}", luceneQuery);
+
+        try {
+            var response = client.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/recording")
+                            .queryParam("query", luceneQuery)
+                            .queryParam("fmt", "json")
+                            .queryParam("limit", 100)
+                            .build())
+                    .retrieve()
+                    .body(RecordingSearchResponse.class);
+
+            if (response == null || response.recordings() == null || response.recordings().isEmpty()) {
+                return List.of();
+            }
+
+            var allReleases = response.recordings().stream()
+                    .flatMap(recording -> {
+                        if (recording.releases() == null) return Stream.empty();
+                        return recording.releases().stream()
+                                .map(release -> convertToReleases(release, recording.artistCredit()));
+                    })
+                    .toList();
+
+            if (allReleases.isEmpty()) {
+                return List.of();
+            }
+
+            return mapToGroupedDomain(allReleases);
+
+        } catch (Exception ex) {
+            log.error("Error searching MusicBrainz recording endpoint: {}", ex.getMessage());
+            throw new SearchNotCompleteException("Search failed due to API error.");
+        }
+    }
+
+    private MusicBrainzSearchResponse.Release convertToReleases(
+            RecordingSearchResponse.Release recordingRelease,
+            List<RecordingSearchResponse.ArtistCredit> recordingArtistCredit) {
+
+        // Use release's artist-credit if present, otherwise fallback to recording's artist-credit
+        List<RecordingSearchResponse.ArtistCredit> sourceArtistCredit =
+                recordingRelease.artistCredit() != null ? recordingRelease.artistCredit() : recordingArtistCredit;
+
+        // Convert artist-credit from recording response to release response format
+        List<MusicBrainzSearchResponse.ArtistCredit> artistCredit = null;
+        if (sourceArtistCredit != null) {
+            artistCredit = sourceArtistCredit.stream()
+                    .map(ac -> new MusicBrainzSearchResponse.ArtistCredit(
+                            ac.name(),
+                            new MusicBrainzSearchResponse.Artist(
+                                    ac.artist().id(),
+                                    ac.artist().name(),
+                                    ac.artist().sortName(),
+                                    null // disambiguation not present in recording response
+                            )
+                    ))
+                    .toList();
+        }
+
+        return new MusicBrainzSearchResponse.Release(
+                recordingRelease.id(),
+                100, // Default score for releases from recording search
+                recordingRelease.statusId(),
+                null, // packagingId
+                null, // artistCreditId
+                0, // count
+                recordingRelease.title(),
+                recordingRelease.status(),
+                null, // disambiguation
+                null, // packaging
+                null, // textRepresentation
+                artistCredit,
+                new MusicBrainzSearchResponse.ReleaseGroup(
+                        recordingRelease.releaseGroup().id(),
+                        null, // typeId
+                        null, // primaryTypeId
+                        recordingRelease.releaseGroup().title(),
+                        recordingRelease.releaseGroup().primaryType(),
+                        recordingRelease.releaseGroup().secondaryTypes() != null ? recordingRelease.releaseGroup().secondaryTypes() : List.of(),
+                        List.of() // secondaryTypeIds
+                ),
+                recordingRelease.date(),
+                recordingRelease.country(),
+                null, // releaseEvents
+                null, // barcode
+                null, // asin
+                null, // labelInfo
+                recordingRelease.trackCount() != null ? recordingRelease.trackCount() : 0,
+                null, // media
+                null // tags
+        );
+    }
+
+    private String toLuceneQuery(MetadataSearchRequest request) {
+        List<String> conditions = new ArrayList<>();
+
+        if (!request.artist().isEmpty()) {
+            conditions.add("artist:\"" + escapeLucene(request.artist()) + "\"");
+        }
+
+        // Handle release and recording with OR logic when both are present
+        boolean hasRelease = !request.release().isEmpty();
+        boolean hasRecording = !request.recording().isEmpty();
+
+        if (hasRelease && hasRecording) {
+            String orCondition = String.format(
+                "(release:\"%s\" OR recording:\"%s\")",
+                escapeLucene(request.release()),
+                escapeLucene(request.recording())
+            );
+            conditions.add(orCondition);
+        } else if (hasRelease) {
+            conditions.add("release:\"" + escapeLucene(request.release()) + "\"");
+        } else if (hasRecording) {
+            conditions.add("recording:\"" + escapeLucene(request.recording()) + "\"");
+        }
+
+        if (request.dateRange() != null && !request.dateRange().isEmpty()) {
+            conditions.add(request.dateRange().toMusicBrainzQuery());
+        }
+
+        if (!request.format().isEmpty()) {
+            conditions.add("format:\"" + escapeLucene(request.format()) + "\"");
+        }
+
+        if (!request.country().isEmpty()) {
+            conditions.add("country:" + request.country());
+        }
+
+        if (!request.status().isEmpty()) {
+            conditions.add("status:" + request.status());
+        }
+
+        if (!request.style().isEmpty()) {
+            conditions.add("tag:\"" + escapeLucene(request.style()) + "\"");
+        }
+
+        if (!request.label().isEmpty()) {
+            conditions.add("label:\"" + escapeLucene(request.label()) + "\"");
+        }
+
+        if (!request.catno().isEmpty()) {
+            conditions.add("catno:\"" + escapeLucene(request.catno()) + "\"");
+        }
+
+        return conditions.isEmpty() ? "*" : String.join(" AND ", conditions);
+    }
+
+    private String escapeLucene(String value) {
+        return value.replace("\"", "\\\"");
     }
 
     private List<ReleaseMetadata> mapToGroupedDomain(List<MusicBrainzSearchResponse.Release> releases) {
@@ -61,14 +238,8 @@ public class MusicBrainzClient implements MusicMetadataService {
         return grouped.values().stream()
                 .map(this::aggregateGroup)
                 .sorted(
-                        // 1. Рік: від новіших до старіших (DESC)
                         Comparator.comparing((ReleaseMetadata m) -> m.years().isEmpty() ? "0000" : m.years().getFirst()).reversed()
-
-                                // 2. Score: від більшого до меншого (DESC)
-                                // Важливо: ми передаємо компаратор всередину thenComparing!
                                 .thenComparing(Comparator.comparingInt(ReleaseMetadata::score).reversed())
-
-                                // 3. Назва: від коротшої до довшої (ASC)
                                 .thenComparingInt(r -> r.title().length())
                 )
                 .toList();
@@ -176,5 +347,10 @@ public class MusicBrainzClient implements MusicMetadataService {
             log.error("Error fetching tracklist: {}", ex.getMessage());
             return List.of();
         }
+    }
+
+    @Override
+    public String getName() {
+        return "musicbrainz";
     }
 }

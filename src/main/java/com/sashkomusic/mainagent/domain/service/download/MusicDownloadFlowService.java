@@ -57,7 +57,7 @@ public class MusicDownloadFlowService {
     public String handleSearchResults(SearchFilesResultDto dto) {
         log.info("Processing search results for chatId={}, releaseId={}", dto.chatId(), dto.releaseId());
 
-        var analysisResult = analyzer.analyzeAll(dto.results(), dto.releaseId());
+        var analysisResult = analyzer.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
         contextService.setDownloadOptionReports(reports);
         contextService.setChosenReleaseForDownload(dto.releaseId());
@@ -93,9 +93,6 @@ public class MusicDownloadFlowService {
                         option.totalSize()
                 );
 
-        return List.of(BotResponse.withButtons(
-                message,
-                Map.of("📊 переглянути статус", "URL:http://localhost:5030/downloads/")
-        ));
+        return List.of(BotResponse.text(message));
     }
 }

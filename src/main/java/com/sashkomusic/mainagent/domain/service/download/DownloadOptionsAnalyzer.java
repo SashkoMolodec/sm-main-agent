@@ -3,7 +3,8 @@ package com.sashkomusic.mainagent.domain.service.download;
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.MusicMetadataService;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
+import com.sashkomusic.mainagent.domain.service.SearchEngineService;
 import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
@@ -19,7 +21,7 @@ public class DownloadOptionsAnalyzer {
 
     private final AiService aiService;
     private final SearchContextHolder contextService;
-    private final MusicMetadataService musicMetadataService;
+    private final Map<SearchEngine, SearchEngineService> searchEngines;
 
     public record OptionReport(
             DownloadOption option,
@@ -33,17 +35,12 @@ public class DownloadOptionsAnalyzer {
     ) {
     }
 
-    public AnalysisResult analyzeAll(java.util.List<DownloadOption> options, String releaseId) {
+    public AnalysisResult analyzeAll(java.util.List<DownloadOption> options, String releaseId, long chatId) {
         if (options.isEmpty()) {
             return new AnalysisResult(java.util.List.of(), "");
         }
 
-        var metadata = contextService.getReleaseMetadata(releaseId);
-        if (metadata == null) {
-            return new AnalysisResult(java.util.List.of(), "");
-        }
-
-        final var enrichedMetadata = updateMetadataWithTracks(releaseId, metadata);
+        final var enrichedMetadata = updateMetadataWithTracks(releaseId, chatId);
         var reports = options.stream()
                 .map(opt -> new OptionReport(opt, resolveSuitabilityLevel(opt, enrichedMetadata)))
                 .sorted(Comparator.comparing(OptionReport::suitability))
@@ -67,11 +64,15 @@ public class DownloadOptionsAnalyzer {
     }
 
     @NotNull
-    private ReleaseMetadata updateMetadataWithTracks(String releaseId, ReleaseMetadata metadata) {
+    private ReleaseMetadata updateMetadataWithTracks(String releaseId, long chatId) {
+        var metadata = contextService.getReleaseMetadata(releaseId);
         if (metadata.trackTitles() == null || metadata.trackTitles().isEmpty()) {
-            var tracks = musicMetadataService.getTracks(releaseId);
+            SearchEngineService engine = searchEngines.get(contextService.getSearchEngine(chatId));
+
+            var tracks = engine.getTracks(releaseId);
             var metadataWithTracks = metadata.withTracks(tracks);
             contextService.saveReleaseMetadata(metadataWithTracks);
+
             return metadataWithTracks;
         } else {
             return metadata;

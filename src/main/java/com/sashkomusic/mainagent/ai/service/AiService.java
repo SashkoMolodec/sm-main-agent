@@ -1,7 +1,7 @@
 package com.sashkomusic.mainagent.ai.service;
 
+import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.MusicSearchQuery;
-import com.sashkomusic.mainagent.domain.model.SearchRequest;
 import com.sashkomusic.mainagent.domain.model.UserIntent;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
@@ -13,16 +13,22 @@ public interface AiService {
             Analyze the user text and determine the intent. Return exactly one enum value.
 
             Intents:
-            1. SEARCH_FOR_RELEASE - User wants to search for music (artist, album, track, year, genre, etc.)
+            1. SEARCH_FOR_RELEASE_DEFAULT - User wants to search for music using default source (MusicBrainz)
                Examples:
                - "Daft Punk" (just artist name)
                - "Онука" (just artist name in Ukrainian/other language)
                - "Aphex Twin ambient tracks"
                - "German techno 90s"
                - "найди альбом Хвороба"
-               - Any unique artist/album name WITHOUT explicit download request
+               - Any unique artist/album name WITHOUT explicit download request and WITHOUT "discogs" keyword
 
-            2. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
+            2. SEARCH_FOR_RELEASE_DISCOGS - User explicitly wants to search in Discogs (contains "discogs" keyword)
+               Examples:
+               - "Паліндром discogs"
+               - "найди альбом Хвороба в discogs"
+               - "шукай nthng discogs"
+
+            3. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
                Examples:
                - "1" (single digit is MOST LIKELY download choice)
                - "2"
@@ -32,16 +38,17 @@ public interface AiService {
                - "варіант 3"
                - "option 2"
 
-            3. GENERAL_CHAT - Greetings, questions about bot, casual conversation
+            4. GENERAL_CHAT - Greetings, questions about bot, casual conversation
                Examples:
                - "hi"
                - "how are you"
                - "що ти вмієш?"
                - "дякую"
 
-            4. UNKNOWN - Cannot determine intent
+            5. UNKNOWN - Cannot determine intent
 
-            Default behavior: If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE
+            Default behavior: If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE_DEFAULT
+            If query contains "discogs" keyword -> SEARCH_FOR_RELEASE_DISCOGS
             """)
     UserIntent classifyIntent(@UserMessage String text);
 
@@ -108,89 +115,201 @@ public interface AiService {
     Integer parseDownloadOptionNumber(String userInput);
 
     @SystemMessage("""
-        You are an Advanced Search Query Builder for MusicBrainz API (Lucene syntax).
-        Convert the user's natural language request into a structured SearchRequest.
+        You are a Universal Metadata Search Query Extractor.
+        Extract ALL search parameters from the user's query into a structured MetadataSearchRequest.
+        This request will be used by different metadata services (MusicBrainz, Discogs, etc).
 
         AVAILABLE FIELDS:
-        - artist:"Name"        (Exact match, e.g. "Daft Punk")
-        - release:"Title"      (Album title)
-        - recording:"Title"    (Track title)
-        - date:YYYY            (Specific year or range date:[1990 TO 1999])
-        - primarytype:Type     (Album | EP | Single)
-        - format:"Format"      (Vinyl | Digital Media | CD | Cassette)
-        - country:Code         (ISO 2-letter code: US, GB, DE, FR, JP...)
-        - status:Status        (Official | Bootleg | Promotion)
-        - tracks:Number        (Number of tracks, e.g. tracks:10)
-        - tag:"Genre"          (e.g. "detroit techno", "ambient", "idm", "rock")
-        - label:"Name"         (Record label name)
-        - catno:"Number"       (Catalog number, e.g. "AX-009")
+        - artist: Artist name
+        - release: Album/release name
+        - recording: Track/song name
+        - dateRange: Year or year range
+          - Single year: "2013" -> {from: 2013, to: 2013}
+          - Range: "90s" -> {from: 1990, to: 1999}
+          - "early 2000s" -> {from: 2000, to: 2004}
+        - format: Vinyl | CD | Cassette | Digital Media | File
+        - type: Album | EP | Single | Compilation
+        - country: ISO 2-letter country code (US, GB, DE, FR, JP, UA, etc)
+        - status: Official | Bootleg | Promotion
+        - style: Genre/style/tag (techno, ambient, rock, idm, etc)
+        - label: Record label name
+        - catno: Catalog number (e.g. "AX-009")
+        - language: UA or EN (detected from user query)
+        - youtubeUrl: empty (generated later)
+        - discogsUrl: empty (generated later)
+        - bandcampUrl: empty (generated later)
 
-        RULES:
-        1. ALWAYS wrap multi-word values in double quotes (e.g. artist:"Daft Punk").
-        2. Combine conditions with AND in luceneQuery field.
-        3. IGNORE words like "latest", "new", "best", "find" (sorting is handled by code).
-        4. **CRITICAL: NEVER translate, transliterate, or change artist names or release titles in ANY way.**
+        CRITICAL RULES:
+        1. **NEVER translate, transliterate, or change artist/release/recording names in ANY way**
            - Keep EXACT original spelling byte-for-byte
-           - DO NOT change Ukrainian "і" to Russian "и"
-           - DO NOT change Ukrainian "ї" to Russian "и"
-           - DO NOT change any Cyrillic, Japanese, Chinese, or other non-Latin characters
            - "Паліндром" MUST stay "Паліндром" (NOT "Палиндром")
-           - "Онука" MUST stay "Онука" (NOT "Онука" in different encoding)
-        5. DATES:
-           - "90s" -> date:[1990 TO 1999]
-           - "early 2000s" -> date:[2000 TO 2004]
-           - "before 2000" -> date:[1900 TO 1999]
-        6. GEOGRAPHY:
-           - If user mentions a country/city, map it to 'country:CODE'.
-           - If it is a known subgenre (e.g. "Detroit Techno", "French House"), use 'tag' field instead.
-           - "German techno" -> tag:techno AND country:DE
-        7. DEFAULT: If no type specified by user, assume (primarytype:Album OR primarytype:EP).
-        8. GENRES/TAGS: You can translate genre names to English for the 'tag' field (e.g., "дарк ембієнт" -> tag:"dark ambient").
+           - "Онука" MUST stay "Онука"
+           - DO NOT change Ukrainian "і" to Russian "и"
+        2. If field not mentioned, use empty string (or null for dateRange)
+        3. IGNORE words like "find", "search", "latest", "best"
+        4. Remove "discogs" keyword if present
+        5. For dateRange: parse into {from, to} object
+        6. For style: you CAN translate genre names (e.g., "дарк ембієнт" -> "dark ambient")
+        7. If no type specified, leave empty (don't assume Album)
 
-        OUTPUT STRUCTURE:
-        - id: null (will be generated later)
-        - artist: extracted artist name (WITHOUT quotes, empty string if not found)
-        - album: extracted release/album title (WITHOUT quotes, empty string if not found)
-        - recording: extracted recording/track title (WITHOUT quotes, empty string if not found)
-        - language: detected language of the user query (UA for Ukrainian, EN for English)
-        - luceneQuery: complete Lucene query string with all conditions
+        TRACK vs RELEASE DETECTION:
+        - Pattern "Artist - Title" WITHOUT context indicators:
+          → Fill BOTH: release="Title" AND recording="Title"
+          → This enables searching both by release name and track name
+        - Has release indicators (album, LP, EP, compilation, vinyl, CD):
+          → Fill ONLY release field
+        - Has track indicators (track, song, single):
+          → Fill ONLY recording field
+        - Examples:
+          → "Aphex Twin - Windowlicker" → release="Windowlicker", recording="Windowlicker"
+          → "Burial - Untrue album" → release="Untrue", recording=""
+          → "Radiohead - Creep track" → release="", recording="Creep"
 
         LANGUAGE DETECTION:
-        - If query contains Cyrillic Ukrainian characters (і, ї, є) or Ukrainian words -> UA
-        - If query is in English -> EN
-        - Default to EN if uncertain
+        - If query contains Ukrainian Cyrillic (і, ї, є) or Ukrainian words -> UA
+        - Otherwise -> EN
+
+        OUTPUT STRUCTURE:
+        {
+          "id": null,
+          "artist": "extracted artist name (empty if not found)",
+          "release": "extracted release/album (empty if not found)",
+          "recording": "extracted track name (empty if not found)",
+          "dateRange": {from: year, to: year} or null,
+          "format": "Vinyl | CD | etc (empty if not found)",
+          "type": "Album | EP | etc (empty if not found)",
+          "country": "US | GB | etc (empty if not found)",
+          "status": "Official | etc (empty if not found)",
+          "style": "techno | ambient | etc (empty if not found)",
+          "label": "label name (empty if not found)",
+          "catno": "catalog number (empty if not found)",
+          "language": "UA or EN",
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
+        }
 
         EXAMPLES:
-        User: "albums by Daft Punk 2013"
+        User: "Daft Punk 2013"
         Output: {
           "id": null,
           "artist": "Daft Punk",
-          "album": "",
+          "release": "",
           "recording": "",
+          "dateRange": {"from": 2013, "to": 2013},
+          "format": "",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "",
+          "catno": "",
           "language": "EN",
-          "luceneQuery": "artist:\\"Daft Punk\\" AND date:2013 AND primarytype:Album"
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
         }
 
         User: "Онука 2014"
         Output: {
           "id": null,
           "artist": "Онука",
-          "album": "",
+          "release": "",
           "recording": "",
+          "dateRange": {"from": 2014, "to": 2014},
+          "format": "",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "",
+          "catno": "",
           "language": "UA",
-          "luceneQuery": "artist:\\"Онука\\" AND date:2014 AND (primarytype:Album OR primarytype:EP)"
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
         }
 
-        User: "Паліндром альбом Хвороба"
+        User: "Паліндром альбом Хвороба discogs"
         Output: {
           "id": null,
           "artist": "Паліндром",
-          "album": "Хвороба",
+          "release": "Хвороба",
           "recording": "",
+          "dateRange": null,
+          "format": "",
+          "type": "Album",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "",
+          "catno": "",
           "language": "UA",
-          "luceneQuery": "artist:\\"Паліндром\\" AND release:\\"Хвороба\\" AND primarytype:Album"
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
+        }
+
+        User: "Jeff Mills 1996 vinyl"
+        Output: {
+          "id": null,
+          "artist": "Jeff Mills",
+          "release": "",
+          "recording": "",
+          "dateRange": {"from": 1996, "to": 1996},
+          "format": "Vinyl",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "",
+          "catno": "",
+          "language": "EN",
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
+        }
+
+        User: "German techno 90s"
+        Output: {
+          "id": null,
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": {"from": 1990, "to": 1999},
+          "format": "",
+          "type": "",
+          "country": "DE",
+          "status": "",
+          "style": "techno",
+          "label": "",
+          "catno": "",
+          "language": "EN",
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
+        }
+
+        User: "Axis Records AX-009"
+        Output: {
+          "id": null,
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": null,
+          "format": "",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "Axis Records",
+          "catno": "AX-009",
+          "language": "EN",
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
         }
         """)
     @UserMessage("{{it}}")
-    SearchRequest buildSearchRequest(String userPrompt);
+    MetadataSearchRequest buildSearchRequest(String userPrompt);
 }

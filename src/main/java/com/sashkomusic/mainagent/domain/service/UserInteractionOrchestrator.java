@@ -10,6 +10,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+import static com.sashkomusic.mainagent.domain.model.SearchEngine.DISCOGS;
+import static com.sashkomusic.mainagent.domain.model.SearchEngine.MUSICBRAINZ;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -24,7 +27,8 @@ public class UserInteractionOrchestrator {
         log.info("Identified intent: {}", intent);
 
         return switch (intent) {
-            case SEARCH_FOR_RELEASE -> releaseSearchFlowService.search(chatId, rawInput);
+            case SEARCH_FOR_RELEASE_DEFAULT -> releaseSearchFlowService.search(chatId, rawInput, MUSICBRAINZ);
+            case SEARCH_FOR_RELEASE_DISCOGS -> releaseSearchFlowService.search(chatId, rawInput, DISCOGS);
             case CHOOSE_DOWNLOAD_OPTION -> musicDownloadFlowService.handleDownload(chatId, rawInput);
             case GENERAL_CHAT, UNKNOWN -> List.of(BotResponse.text("шем не видів такого, сорі 😔"));
         };
@@ -32,12 +36,18 @@ public class UserInteractionOrchestrator {
 
     public List<BotResponse> handleCallback(long chatId, String data) {
         if (data.startsWith("PAGE:")) {
-            int page = Integer.parseInt(data.substring(5));
-            return releaseSearchFlowService.handlePagination(chatId, page);
+            return releaseSearchFlowService.buildPageResponse(chatId, getPage(data));
         }
         if (data.startsWith("DL:")) {
             return List.of(musicDownloadFlowService.handleCallback(chatId, data));
         }
+        if (data.equals("DIG_DEEPER")) {
+            return releaseSearchFlowService.switchStrategyAndSearch(chatId);
+        }
         return List.of(BotResponse.text("хз, пупупу"));
+    }
+
+    private static int getPage(String data) {
+        return Integer.parseInt(data.substring(5));
     }
 }

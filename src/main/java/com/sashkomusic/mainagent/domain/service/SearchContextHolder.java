@@ -1,8 +1,10 @@
 package com.sashkomusic.mainagent.domain.service;
 
+import com.sashkomusic.mainagent.domain.exception.SearchSessionExpiredException;
+import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.SearchContext;
-import com.sashkomusic.mainagent.domain.model.SearchRequest;
 import com.sashkomusic.mainagent.domain.service.download.DownloadOptionsAnalyzer;
 import lombok.Getter;
 import lombok.Setter;
@@ -33,30 +35,44 @@ public class SearchContextHolder {
         releaseMetadata.put(metadata.id(), metadata);
     }
 
-    public void saveSearchResults(long chatId, SearchRequest request, List<ReleaseMetadata> results) {
+    public void saveSearchContext(long chatId, SearchEngine source, String rawInput, MetadataSearchRequest request, List<ReleaseMetadata> results) {
         results.forEach(r -> releaseMetadata.put(r.id(), r));
 
         List<String> releaseIds = results.stream()
                 .map(ReleaseMetadata::id)
                 .toList();
 
-        userSearches.put(chatId, new SearchContext(request, releaseIds));
+        userSearches.put(chatId, new SearchContext(source, request, rawInput, releaseIds));
+    }
+
+    public void validateSession(long chatId) {
+        SearchContext context = userSearches.get(chatId);
+        if (context == null) {
+            throw new SearchSessionExpiredException("Search session not found for chatId: " + chatId);
+        }
     }
 
     public List<ReleaseMetadata> getSearchResults(long chatId) {
+        validateSession(chatId);
         SearchContext context = userSearches.get(chatId);
-        if (context == null) {
-            return null;
-        }
-
         return context.releaseIds().stream()
                 .map(releaseMetadata::get)
                 .filter(Objects::nonNull)
                 .toList();
     }
 
-    public SearchRequest getSearchRequest(long chatId) {
-        SearchContext context = userSearches.get(chatId);
-        return context != null ? context.request() : null;
+    public MetadataSearchRequest getSearchRequest(long chatId) {
+        validateSession(chatId);
+        return userSearches.get(chatId).request();
+    }
+
+    public SearchEngine getSearchEngine(long chatId) {
+        validateSession(chatId);
+        return userSearches.get(chatId).searchEngine();
+    }
+
+    public String getRawInput(long chatId) {
+        validateSession(chatId);
+        return userSearches.get(chatId).rawInput();
     }
 }

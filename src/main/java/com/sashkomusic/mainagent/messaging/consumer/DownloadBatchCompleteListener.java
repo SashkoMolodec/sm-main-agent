@@ -1,7 +1,11 @@
 package com.sashkomusic.mainagent.messaging.consumer;
 
 import com.sashkomusic.mainagent.api.telegram.TelegramChatBot;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
 import com.sashkomusic.mainagent.messaging.consumer.dto.DownloadBatchCompleteDto;
+import com.sashkomusic.mainagent.messaging.producer.dto.ProcessLibraryTaskDto;
+import com.sashkomusic.mainagent.messaging.producer.ProcessLibraryTaskProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -13,6 +17,8 @@ import org.springframework.stereotype.Component;
 public class DownloadBatchCompleteListener {
 
     private final TelegramChatBot chatBot;
+    private final ProcessLibraryTaskProducer libraryTaskProducer;
+    private final SearchContextHolder contextHolder;
 
     @KafkaListener(topics = "download-batch-complete", groupId = "main-agent-group")
     public void handleBatchComplete(DownloadBatchCompleteDto batchComplete) {
@@ -21,6 +27,28 @@ public class DownloadBatchCompleteListener {
 
         String message = buildCompletionMessage(batchComplete);
         chatBot.sendMessage(batchComplete.chatId(), message);
+
+        sendToLibraryProcess(batchComplete);
+    }
+
+    private void sendToLibraryProcess(DownloadBatchCompleteDto batchComplete) {
+        ReleaseMetadata metadata = contextHolder.getReleaseMetadata(batchComplete.releaseId());
+        if (metadata != null) {
+            String masterId = metadata.masterId();
+
+            ProcessLibraryTaskDto libraryTask = ProcessLibraryTaskDto.of(
+                    batchComplete.chatId(),
+                    masterId,
+                    batchComplete.directoryPath(),
+                    batchComplete.allFiles()
+            );
+
+            libraryTaskProducer.send(libraryTask);
+            log.info("Sent library processing task for releaseId={}, masterId={}",
+                    batchComplete.releaseId(), masterId);
+        } else {
+            log.warn("No metadata found for releaseId={}, skipping library processing", batchComplete.releaseId());
+        }
     }
 
     private String buildCompletionMessage(DownloadBatchCompleteDto batch) {

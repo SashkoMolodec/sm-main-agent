@@ -2,9 +2,9 @@ package com.sashkomusic.mainagent.domain.service;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
-import com.sashkomusic.mainagent.domain.model.Language;
+import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.model.SearchRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,36 +21,40 @@ public class ReleaseSearchFlowService {
     private static final int PAGE_SIZE = 3;
 
     private final AiService analyzer;
-    private final MusicMetadataService musicMetadataService;
+    private final Map<SearchEngine, SearchEngineService> searchEngines;
     private final SearchContextHolder contextService;
 
-    public List<BotResponse> search(long chatId, String rawInput) {
+    public List<BotResponse> search(long chatId, String rawInput, SearchEngine searchEngine) {
+        log.info("Searching with engine: {}", searchEngine);
         var searchRequest = analyzer.buildSearchRequest(rawInput);
 
-        var releases = musicMetadataService.searchReleases(searchRequest.luceneQuery());
+        var engine = searchEngines.get(searchEngine);
+        var releases = engine.searchReleases(searchRequest);
+
         if (releases.isEmpty()) {
             var buttons = buildSearchButtons(searchRequest);
-            return List.of(BotResponse.withButtons("😔 нич не знайшов в musicbrainz", buttons));
+            buttons.put("⛏️", "DIG_DEEPER");
+            return List.of(BotResponse.withButtons("😔 нич не знайшов в %s.".formatted(engine.getName()), buttons));
         }
 
-        contextService.saveSearchResults(chatId, searchRequest, releases);
-
-        return generatePageResponse(releases, searchRequest, 0);
+        contextService.saveSearchContext(chatId, searchEngine, rawInput, searchRequest, releases);
+        return buildPageResponse(chatId, 0);
     }
 
-    public List<BotResponse> handlePagination(long chatId, int page) {
+    public List<BotResponse> switchStrategyAndSearch(long chatId) {
+        SearchEngine currentEngine = contextService.getSearchEngine(chatId);
+        if (currentEngine == SearchEngine.MUSICBRAINZ) {
+            String rawInput = contextService.getRawInput(chatId);
+            return search(chatId, rawInput, SearchEngine.DISCOGS);
+        } else {
+            return List.of(BotResponse.text("😔 глибше нікуди, вшьо."));
+        }
+    }
+
+    public List<BotResponse> buildPageResponse(long chatId, int page) {
         var releases = contextService.getSearchResults(chatId);
         var searchRequest = contextService.getSearchRequest(chatId);
-
-        if (sessionOutdated(releases, searchRequest)) {
-            return List.of(BotResponse.text("⚠️ сесія пошуку застаріла. зробіть новий запит."));
-        }
-
-        return generatePageResponse(releases, searchRequest, page);
-    }
-
-    private List<BotResponse> generatePageResponse(List<ReleaseMetadata> releases, SearchRequest searchRequest, int page) {
-        List<BotResponse> responses = new ArrayList<>();
+        var responses = new ArrayList<BotResponse>();
 
         int start = page * PAGE_SIZE;
         if (start >= releases.size()) {
@@ -62,7 +66,7 @@ public class ReleaseSearchFlowService {
         int end = Math.min(start + PAGE_SIZE, releases.size());
         for (int i = start; i < end; i++) {
             var release = releases.get(i);
-            responses.add(buildReleaseCard(release));
+            responses.add(buildReleaseCard(release, searchRequest));
         }
 
         if (end < releases.size()) {
@@ -71,7 +75,7 @@ public class ReleaseSearchFlowService {
         return responses;
     }
 
-    private static BotResponse buildReleaseCard(ReleaseMetadata release) {
+    private static BotResponse buildReleaseCard(ReleaseMetadata release, MetadataSearchRequest searchRequest) {
         String cardText = """
                 💿 %s
                 👤 %s
@@ -85,9 +89,9 @@ public class ReleaseSearchFlowService {
         ).toLowerCase();
 
         Map<String, String> buttons = new LinkedHashMap<>();
-        addYoutubeButton(buttons, release.getYoutubeUrl());
-        addDiscogsButton(buttons, release.getDiscogsUrl());
-        addBandcampButton(buttons, release.getBandcampUrl());
+        addYoutubeButton(buttons, searchRequest.getYoutubeUrl());
+        addDiscogsButton(buttons, searchRequest.getDiscogsUrl());
+        addBandcampButton(buttons, searchRequest.getBandcampUrl());
         buttons.put("⬇️", "DL:" + release.id());
 
         return BotResponse.card(
@@ -118,7 +122,7 @@ public class ReleaseSearchFlowService {
         }
     }
 
-    private static Map<String, String> buildSearchButtons(SearchRequest searchRequest) {
+    private static Map<String, String> buildSearchButtons(MetadataSearchRequest searchRequest) {
         Map<String, String> buttons = new LinkedHashMap<>();
         addYoutubeButton(buttons, searchRequest.getYoutubeUrl());
         addDiscogsButton(buttons, searchRequest.getDiscogsUrl());
@@ -136,9 +140,5 @@ public class ReleaseSearchFlowService {
 
     private static void addBandcampButton(Map<String, String> buttons, String url) {
         buttons.put("📼", "URL:" + url);
-    }
-
-    private static boolean sessionOutdated(List<ReleaseMetadata> releases, SearchRequest searchRequest) {
-        return releases == null || releases.isEmpty() || searchRequest == null;
     }
 }

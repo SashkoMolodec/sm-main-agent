@@ -1,6 +1,7 @@
 package com.sashkomusic.mainagent.api.telegram;
 
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.exception.SearchSessionExpiredException;
 import com.sashkomusic.mainagent.domain.service.UserInteractionOrchestrator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,7 +53,7 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
         try {
             if (update.hasMessage() && update.getMessage().hasText()) {
                 var text = update.getMessage().getText();
-                var chatId = update.getMessage().getChatId();
+                final long chatId = update.getMessage().getChatId();
                 log.info("📩 Text from [{}]: {}", chatId, text);
 
                 orchestrator.handleUserRequest(chatId, text)
@@ -61,7 +62,7 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
             } else if (update.hasCallbackQuery()) {
                 var callback = update.getCallbackQuery();
                 var data = callback.getData();
-                var chatId = callback.getMessage().getChatId();
+                final long chatId = callback.getMessage().getChatId();
                 var queryId = callback.getId();
 
                 log.info("👆 Click from [{}]: {}", chatId, data);
@@ -70,6 +71,8 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
                 orchestrator.handleCallback(chatId, data)
                         .forEach(response -> sendResponse(chatId, response));
             }
+        } catch (SearchSessionExpiredException e) {
+            log.warn("Session expired: {}", e.getMessage());
         } catch (Exception e) {
             log.error("Unexpected error in consumer: ", e);
         }
