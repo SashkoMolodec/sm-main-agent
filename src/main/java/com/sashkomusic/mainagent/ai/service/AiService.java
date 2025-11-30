@@ -40,7 +40,16 @@ public interface AiService {
                - "bandcamp" (just the word)
                - Any query with "bandcamp" keyword
 
-            4. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
+            4. DIG_DEEPER - User wants to search in alternative sources (dig deeper into search results)
+               Examples:
+               - "копай" / "копай глибше"
+               - "ше" / "ще"
+               - "блять" (expressing frustration, wants more results)
+               - "пошукай ще"
+               - "шукай в іншому місці"
+               - Any short frustrated phrase suggesting "try again elsewhere"
+
+            5. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
                Examples:
                - "1" (single digit is MOST LIKELY download choice)
                - "2"
@@ -50,19 +59,20 @@ public interface AiService {
                - "варіант 3"
                - "option 2"
 
-            5. GENERAL_CHAT - Greetings, questions about bot, casual conversation
+            6. GENERAL_CHAT - Greetings, questions about bot, casual conversation
                Examples:
                - "hi"
                - "how are you"
                - "що ти вмієш?"
                - "дякую"
 
-            6. UNKNOWN - Cannot determine intent
+            7. UNKNOWN - Cannot determine intent
 
             Default behavior:
             - If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE_DEFAULT
-            - If query contains "discogs" keyword OR phrases like "копай глибше", "шукай ще" -> SEARCH_FOR_RELEASE_DISCOGS
+            - If query contains "discogs" keyword -> SEARCH_FOR_RELEASE_DISCOGS
             - If query contains "bandcamp" keyword -> SEARCH_FOR_RELEASE_BANDCAMP
+            - If query contains dig deeper phrases ("копай", "ще", "блять") -> DIG_DEEPER
             """)
     UserIntent classifyIntent(@UserMessage String text);
 

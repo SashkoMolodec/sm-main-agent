@@ -27,10 +27,6 @@ public class ReleaseSearchFlowService {
     private final SearchContextHolder contextService;
 
     public List<BotResponse> search(long chatId, String rawInput, SearchEngine searchEngine) {
-        if (continueDigging(rawInput)) {
-            rawInput = contextService.getRawInput(chatId);
-        }
-
         log.info("Searching with engine: {}", searchEngine);
         var searchRequest = analyzer.buildSearchRequest(rawInput);
 
@@ -172,12 +168,5 @@ public class ReleaseSearchFlowService {
             return metadataLine;
         }
         return metadataLine + " • " + trackCount + " тр.";
-    }
-
-    private boolean continueDigging(String rawInput) {
-        String lower = rawInput.toLowerCase().trim();
-        return lower.contains("копай")
-                || lower.contains("ше")
-                || lower.contains("блять");
     }
 }

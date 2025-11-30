@@ -31,6 +31,7 @@ public class UserInteractionOrchestrator {
             case SEARCH_FOR_RELEASE_DEFAULT -> releaseSearchFlowService.search(chatId, rawInput, MUSICBRAINZ);
             case SEARCH_FOR_RELEASE_DISCOGS -> releaseSearchFlowService.search(chatId, rawInput, DISCOGS);
             case SEARCH_FOR_RELEASE_BANDCAMP -> releaseSearchFlowService.search(chatId, rawInput, BANDCAMP);
+            case DIG_DEEPER -> releaseSearchFlowService.switchStrategyAndSearch(chatId);
             case CHOOSE_DOWNLOAD_OPTION -> musicDownloadFlowService.handleDownload(chatId, rawInput);
             case GENERAL_CHAT, UNKNOWN -> List.of(BotResponse.text("шем не видів такого, сорі 😔"));
         };
