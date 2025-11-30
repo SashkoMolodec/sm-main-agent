@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+import static com.sashkomusic.mainagent.domain.model.SearchEngine.BANDCAMP;
 import static com.sashkomusic.mainagent.domain.model.SearchEngine.DISCOGS;
 import static com.sashkomusic.mainagent.domain.model.SearchEngine.MUSICBRAINZ;
 
@@ -29,6 +30,7 @@ public class UserInteractionOrchestrator {
         return switch (intent) {
             case SEARCH_FOR_RELEASE_DEFAULT -> releaseSearchFlowService.search(chatId, rawInput, MUSICBRAINZ);
             case SEARCH_FOR_RELEASE_DISCOGS -> releaseSearchFlowService.search(chatId, rawInput, DISCOGS);
+            case SEARCH_FOR_RELEASE_BANDCAMP -> releaseSearchFlowService.search(chatId, rawInput, BANDCAMP);
             case CHOOSE_DOWNLOAD_OPTION -> musicDownloadFlowService.handleDownload(chatId, rawInput);
             case GENERAL_CHAT, UNKNOWN -> List.of(BotResponse.text("шем не видів такого, сорі 😔"));
         };

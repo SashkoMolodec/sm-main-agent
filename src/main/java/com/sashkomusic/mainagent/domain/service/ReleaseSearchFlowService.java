@@ -49,9 +49,12 @@ public class ReleaseSearchFlowService {
 
     public List<BotResponse> switchStrategyAndSearch(long chatId) {
         SearchEngine currentEngine = contextService.getSearchEngine(chatId);
+        String rawInput = contextService.getRawInput(chatId);
+
         if (currentEngine == SearchEngine.MUSICBRAINZ) {
-            String rawInput = contextService.getRawInput(chatId);
             return search(chatId, rawInput, SearchEngine.DISCOGS);
+        } else if (currentEngine == SearchEngine.DISCOGS) {
+            return search(chatId, rawInput, SearchEngine.BANDCAMP);
         } else {
             return List.of(BotResponse.text("😔 глибше нікуди, вшьо."));
         }

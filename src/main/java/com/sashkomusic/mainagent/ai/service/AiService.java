@@ -32,7 +32,15 @@ public interface AiService {
                - "шукай ще" (search more)
                - "пошукай в іншому місці"
 
-            3. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
+            3. SEARCH_FOR_RELEASE_BANDCAMP - User explicitly wants to search in Bandcamp
+               Examples:
+               - "Паліндром bandcamp"
+               - "найди альбом Хвороба в bandcamp"
+               - "шукай nthng bandcamp"
+               - "bandcamp" (just the word)
+               - Any query with "bandcamp" keyword
+
+            4. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
                Examples:
                - "1" (single digit is MOST LIKELY download choice)
                - "2"
@@ -42,17 +50,19 @@ public interface AiService {
                - "варіант 3"
                - "option 2"
 
-            4. GENERAL_CHAT - Greetings, questions about bot, casual conversation
+            5. GENERAL_CHAT - Greetings, questions about bot, casual conversation
                Examples:
                - "hi"
                - "how are you"
                - "що ти вмієш?"
                - "дякую"
 
-            5. UNKNOWN - Cannot determine intent
+            6. UNKNOWN - Cannot determine intent
 
-            Default behavior: If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE_DEFAULT
-            If query contains "discogs" keyword OR phrases like "копай глибше", "шукай ще" -> SEARCH_FOR_RELEASE_DISCOGS
+            Default behavior:
+            - If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE_DEFAULT
+            - If query contains "discogs" keyword OR phrases like "копай глибше", "шукай ще" -> SEARCH_FOR_RELEASE_DISCOGS
+            - If query contains "bandcamp" keyword -> SEARCH_FOR_RELEASE_BANDCAMP
             """)
     UserIntent classifyIntent(@UserMessage String text);
 
