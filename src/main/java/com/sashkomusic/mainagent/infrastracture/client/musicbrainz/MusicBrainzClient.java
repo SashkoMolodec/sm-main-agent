@@ -291,7 +291,8 @@ public class MusicBrainzClient implements SearchEngineService {
                 minTracks,
                 maxTracks,
                 groupReleases.size(),
-                List.of()
+                List.of(),
+                null // MusicBrainz doesn't provide cover URLs, will fallback to CoverArtArchive
         );
     }
 

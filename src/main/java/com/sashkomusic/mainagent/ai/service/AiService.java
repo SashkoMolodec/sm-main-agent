@@ -22,11 +22,15 @@ public interface AiService {
                - "найди альбом Хвороба"
                - Any unique artist/album name WITHOUT explicit download request and WITHOUT "discogs" keyword
 
-            2. SEARCH_FOR_RELEASE_DISCOGS - User explicitly wants to search in Discogs (contains "discogs" keyword)
+            2. SEARCH_FOR_RELEASE_DISCOGS - User explicitly wants to search in Discogs OR wants to dig deeper/search more
                Examples:
                - "Паліндром discogs"
                - "найди альбом Хвороба в discogs"
                - "шукай nthng discogs"
+               - "discogs" (just the word)
+               - "копай глибше" (dig deeper)
+               - "шукай ще" (search more)
+               - "пошукай в іншому місці"
 
             3. CHOOSE_DOWNLOAD_OPTION - User is selecting a download option (typically a single digit 1-5)
                Examples:
@@ -48,7 +52,7 @@ public interface AiService {
             5. UNKNOWN - Cannot determine intent
 
             Default behavior: If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE_DEFAULT
-            If query contains "discogs" keyword -> SEARCH_FOR_RELEASE_DISCOGS
+            If query contains "discogs" keyword OR phrases like "копай глибше", "шукай ще" -> SEARCH_FOR_RELEASE_DISCOGS
             """)
     UserIntent classifyIntent(@UserMessage String text);
 

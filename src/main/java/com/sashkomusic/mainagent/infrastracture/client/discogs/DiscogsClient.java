@@ -58,34 +58,81 @@ public class DiscogsClient implements SearchEngineService {
     private void addDiscogsParameters(UriBuilder builder, MetadataSearchRequest request) {
         builder.path("/database/search")
                 .queryParam("type", "master,release")
-                .queryParam("per_page", "50");
+                .queryParam("per_page", "200");
+
+        int filledFieldCount = 0;
+        String singleValue = null;
 
         if (!request.artist().isEmpty()) {
-            builder.queryParam("artist", request.artist());
+            filledFieldCount++;
+            singleValue = request.artist();
         }
-        if (!request.release().isEmpty()) {
-            builder.queryParam("release_title", request.release());
+
+        boolean hasRelease = !request.release().isEmpty();
+        boolean hasRecording = !request.recording().isEmpty();
+        if (hasRelease || hasRecording) {
+            filledFieldCount++;
+            singleValue = hasRelease ? request.release() : request.recording();
         }
-        if (!request.recording().isEmpty()) {
-            builder.queryParam("track", request.recording());
-        }
+
         if (request.dateRange() != null && !request.dateRange().isEmpty()) {
-            builder.queryParam("year", request.dateRange().toDiscogsParam());
+            filledFieldCount++;
+            singleValue = request.dateRange().toDiscogsParam();
         }
         if (!request.format().isEmpty()) {
-            builder.queryParam("format", request.format());
+            filledFieldCount++;
+            singleValue = request.format();
         }
         if (!request.catno().isEmpty()) {
-            builder.queryParam("catno", request.catno());
+            filledFieldCount++;
+            singleValue = request.catno();
         }
         if (!request.label().isEmpty()) {
-            builder.queryParam("label", request.label());
+            filledFieldCount++;
+            singleValue = request.label();
         }
         if (!request.style().isEmpty()) {
-            builder.queryParam("style", request.style());
+            filledFieldCount++;
+            singleValue = request.style();
         }
         if (!request.country().isEmpty()) {
-            builder.queryParam("country", request.country());
+            filledFieldCount++;
+            singleValue = request.country();
+        }
+
+        if (filledFieldCount == 1) {
+            log.info("Using general 'q' search with value: {}", singleValue);
+            builder.queryParam("q", singleValue);
+        } else {
+            log.info("Using specific field search with {} parameters", filledFieldCount);
+            if (!request.artist().isEmpty()) {
+                builder.queryParam("artist", request.artist());
+            }
+
+            if (hasRelease) {
+                builder.queryParam("release_title", request.release());
+            } else if (hasRecording) {
+                builder.queryParam("track", request.recording());
+            }
+
+            if (request.dateRange() != null && !request.dateRange().isEmpty()) {
+                builder.queryParam("year", request.dateRange().toDiscogsParam());
+            }
+            if (!request.format().isEmpty()) {
+                builder.queryParam("format", request.format());
+            }
+            if (!request.catno().isEmpty()) {
+                builder.queryParam("catno", request.catno());
+            }
+            if (!request.label().isEmpty()) {
+                builder.queryParam("label", request.label());
+            }
+            if (!request.style().isEmpty()) {
+                builder.queryParam("style", request.style());
+            }
+            if (!request.country().isEmpty()) {
+                builder.queryParam("country", request.country());
+            }
         }
 
         if (!apiToken.isEmpty()) {
@@ -98,28 +145,17 @@ public class DiscogsClient implements SearchEngineService {
                 .filter(r -> "master".equals(r.type()) || "release".equals(r.type()))
                 .toList();
 
-        // Group by master_id when present (not null and not 0)
-        // Otherwise, each release becomes its own group
         Map<String, List<DiscogsSearchResponse.Result>> grouped = releases.stream()
-                .collect(Collectors.groupingBy(r -> {
-                    if (r.masterId() != null && r.masterId() != 0) {
-                        return "M" + r.masterId();
-                    } else {
-                        return "R" + r.id();
-                    }
-                }));
+                .collect(Collectors.groupingBy(r -> extractTitle(r.title()).toLowerCase().trim()));
 
         return grouped.values().stream()
                 .map(this::aggregateGroup)
-                .sorted(Comparator.comparing((ReleaseMetadata m) -> m.years().isEmpty() ? "0000" : m.years().getFirst()).reversed()
+                .sorted(Comparator.comparing((ReleaseMetadata m) -> m.years().isEmpty() ? "0000" : m.years().getLast()).reversed()
                         .thenComparingInt(ReleaseMetadata::score).reversed())
                 .toList();
     }
 
     private ReleaseMetadata aggregateGroup(List<DiscogsSearchResponse.Result> groupResults) {
-        // Select most relevant release from group:
-        // 1. Prefer "master" type entries
-        // 2. Otherwise use first result
         var representative = groupResults.stream()
                 .filter(r -> "master".equals(r.type()))
                 .findFirst()
@@ -139,7 +175,7 @@ public class DiscogsClient implements SearchEngineService {
         List<String> types = groupResults.stream()
                 .map(DiscogsSearchResponse.Result::format)
                 .filter(Objects::nonNull)
-                .filter(f -> !f.isEmpty())
+                .flatMap(List::stream)
                 .distinct()
                 .toList();
 
@@ -164,7 +200,8 @@ public class DiscogsClient implements SearchEngineService {
                 0, // Track count not available in search response
                 0,
                 groupResults.size(),
-                List.of()
+                List.of(),
+                representative.coverImage() // Use Discogs cover image URL
         );
     }
 
@@ -189,9 +226,6 @@ public class DiscogsClient implements SearchEngineService {
     @Override
     public List<String> getTracks(String releaseId) {
         log.info("Fetching tracklist from Discogs for release ID: {}", releaseId);
-
-        // For now, return empty list as Discogs track fetching requires additional API calls
-        // This can be implemented later if needed
         return List.of();
     }
 

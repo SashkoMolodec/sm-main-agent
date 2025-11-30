@@ -1,7 +1,5 @@
 package com.sashkomusic.mainagent.domain.model;
 
-import com.sashkomusic.mainagent.domain.util.SearchUrlUtils;
-
 import java.util.List;
 
 public record ReleaseMetadata(
@@ -15,10 +13,14 @@ public record ReleaseMetadata(
         int minTracks,
         int maxTracks,
         int totalReleasesFound,
-        List<String> trackTitles
+        List<String> trackTitles,
+        String coverUrl
 ) {
 
     public String getCoverArtUrl() {
+        if (coverUrl != null && !coverUrl.isBlank()) {
+            return coverUrl;
+        }
         if (masterId != null && !masterId.isBlank()) {
             return "https://coverartarchive.org/release-group/" + masterId + "/front-500";
         }
@@ -27,7 +29,7 @@ public record ReleaseMetadata(
 
     public String getTrackCountDisplay() {
         if (minTracks == 0 && maxTracks == 0) {
-            return "?";
+            return "";
         }
         if (minTracks == maxTracks) {
             return String.valueOf(minTracks);
@@ -63,7 +65,8 @@ public record ReleaseMetadata(
                 this.minTracks,
                 this.maxTracks,
                 this.totalReleasesFound,
-                tracks
+                tracks,
+                this.coverUrl
         );
     }
 }
