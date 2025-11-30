@@ -2,6 +2,7 @@ package com.sashkomusic.mainagent.infrastracture.client.bandcamp;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
 import com.sashkomusic.mainagent.domain.service.SearchEngineService;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -18,8 +19,10 @@ import java.util.stream.Collectors;
 public class BandcampClient implements SearchEngineService {
 
     private final RestClient client;
+    private final SearchContextHolder contextHolder;
 
-    public BandcampClient(RestClient.Builder builder) {
+    public BandcampClient(RestClient.Builder builder, SearchContextHolder contextHolder) {
+        this.contextHolder = contextHolder;
         this.client = builder
                 .baseUrl("https://bandcamp.com")
                 .defaultHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
@@ -194,7 +197,9 @@ public class BandcampClient implements SearchEngineService {
         // Image is in <img src="...">
         Element imgElement = element.selectFirst("img");
         if (imgElement != null) {
-            return imgElement.attr("src");
+            String imageUrl = imgElement.attr("src");
+            // Upgrade image quality: _7 -> _16 for better resolution
+            return imageUrl.replace("_7.jpg", "_16.jpg");
         }
         return "";
     }
@@ -355,14 +360,43 @@ public class BandcampClient implements SearchEngineService {
     public List<String> getTracks(String releaseId) {
         log.info("Fetching tracklist from Bandcamp for release ID: {}", releaseId);
 
-        // Bandcamp tracklist would require fetching and parsing the release page
-        // For now, return empty list
-        // Could be implemented later by:
-        // 1. Decode URL from releaseId
-        // 2. Fetch release page HTML
-        // 3. Parse track list from page
+        try {
+            ReleaseMetadata metadata = contextHolder.getReleaseMetadata(releaseId);
+            if (metadata == null || metadata.masterId() == null) {
+                log.warn("No metadata found for release ID: {}", releaseId);
+                return List.of();
+            }
 
-        return List.of();
+            String url = metadata.masterId(); // Full Bandcamp URL stored here
+            log.info("Fetching tracklist from URL: {}", url);
+
+            // Fetch release page HTML
+            String html = client.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(String.class);
+
+            if (html == null || html.isEmpty()) {
+                log.warn("Empty response from Bandcamp URL: {}", url);
+                return List.of();
+            }
+
+            // Parse track list from table
+            Document doc = Jsoup.parse(html);
+            var trackElements = doc.select("table.track_list tr.track_row_view span.track-title");
+
+            List<String> tracks = trackElements.stream()
+                    .map(Element::text)
+                    .filter(t -> !t.isEmpty())
+                    .toList();
+
+            log.info("Found {} tracks for release {}", tracks.size(), releaseId);
+            return tracks;
+
+        } catch (Exception ex) {
+            log.error("Error fetching tracklist from Bandcamp: {}", ex.getMessage());
+            return List.of();
+        }
     }
 
     @Override
