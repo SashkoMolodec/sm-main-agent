@@ -189,8 +189,13 @@ public class DiscogsClient implements SearchEngineService {
                 .distinct()
                 .toList();
 
+        // Combine genre and style for comprehensive tags
         List<String> tags = groupResults.stream()
-                .flatMap(r -> r.style() != null ? r.style().stream() : java.util.stream.Stream.empty())
+                .flatMap(r -> {
+                    java.util.stream.Stream<String> genreStream = r.genre() != null ? r.genre().stream() : java.util.stream.Stream.empty();
+                    java.util.stream.Stream<String> styleStream = r.style() != null ? r.style().stream() : java.util.stream.Stream.empty();
+                    return java.util.stream.Stream.concat(genreStream, styleStream);
+                })
                 .collect(Collectors.groupingBy(
                         java.util.function.Function.identity(),
                         Collectors.counting()
