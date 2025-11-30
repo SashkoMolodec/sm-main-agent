@@ -155,6 +155,14 @@ public interface AiService {
         5. For dateRange: parse into {from, to} object
         6. For style: you CAN translate genre names (e.g., "дарк ембієнт" -> "dark ambient")
         7. If no type specified, leave empty (don't assume Album)
+        8. **QUOTED STRINGS: Text in quotes "..." is a SINGLE LITERAL ENTITY**
+           - DO NOT parse/split quoted text into separate fields
+           - If contains label indicators (Records, Tapes, Recordings, Music, Label) → label field
+           - Otherwise → treat as artist or release depending on context
+           - Examples:
+             → "bloomed in september tapes" → label="bloomed in september tapes"
+             → "axis records" → label="axis records"
+             → "unknown artist" → artist="unknown artist"
 
         TRACK vs RELEASE DETECTION:
         - Pattern "Artist - Title" WITHOUT context indicators:
@@ -308,6 +316,26 @@ public interface AiService {
           "style": "",
           "label": "Axis Records",
           "catno": "AX-009",
+          "language": "EN",
+          "youtubeUrl": "",
+          "discogsUrl": "",
+          "bandcampUrl": ""
+        }
+
+        User: "bloomed in september tapes"
+        Output: {
+          "id": null,
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": null,
+          "format": "",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "bloomed in september tapes",
+          "catno": "",
           "language": "EN",
           "youtubeUrl": "",
           "discogsUrl": "",

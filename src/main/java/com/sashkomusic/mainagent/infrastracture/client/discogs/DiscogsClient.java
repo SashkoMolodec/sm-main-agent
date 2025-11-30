@@ -141,17 +141,27 @@ public class DiscogsClient implements SearchEngineService {
     }
 
     private List<ReleaseMetadata> mapToDomain(List<DiscogsSearchResponse.Result> results) {
+        log.debug("Mapping {} Discogs results to domain", results.size());
+
         List<DiscogsSearchResponse.Result> releases = results.stream()
                 .filter(r -> "master".equals(r.type()) || "release".equals(r.type()))
                 .toList();
 
+        log.debug("After filtering by type, {} releases remain", releases.size());
+
         Map<String, List<DiscogsSearchResponse.Result>> grouped = releases.stream()
-                .collect(Collectors.groupingBy(r -> extractTitle(r.title()).toLowerCase().trim()));
+                .collect(Collectors.groupingBy(r -> {
+                    String title = extractTitle(r.title()).toLowerCase().trim();
+                    return title.replaceAll("[\\p{C}\\p{Z}&&[^ ]]", "");
+                }));
+
+        log.debug("Grouped into {} unique titles", grouped.size());
 
         return grouped.values().stream()
                 .map(this::aggregateGroup)
-                .sorted(Comparator.comparing((ReleaseMetadata m) -> m.years().isEmpty() ? "0000" : m.years().getLast()).reversed()
-                        .thenComparingInt(ReleaseMetadata::score).reversed())
+                .sorted(Comparator.comparing((ReleaseMetadata m) -> m.years().stream()
+                        .max(String::compareTo)
+                        .orElse("0000")).thenComparingInt(ReleaseMetadata::score).reversed())
                 .toList();
     }
 
@@ -226,7 +236,78 @@ public class DiscogsClient implements SearchEngineService {
     @Override
     public List<String> getTracks(String releaseId) {
         log.info("Fetching tracklist from Discogs for release ID: {}", releaseId);
-        return List.of();
+
+        // Parse releaseId format: "discogs:master:123" or "discogs:release:456"
+        if (!releaseId.startsWith("discogs:")) {
+            log.warn("Invalid Discogs release ID format: {}", releaseId);
+            return List.of();
+        }
+
+        String[] parts = releaseId.split(":");
+        if (parts.length != 3) {
+            log.warn("Invalid Discogs release ID format: {}", releaseId);
+            return List.of();
+        }
+
+        String type = parts[1]; // "master" or "release"
+        String id = parts[2];   // actual ID
+
+        try {
+            // If it's a master, we need to fetch the main release first
+            if ("master".equals(type)) {
+                return getTracksFromMaster(id);
+            } else {
+                return getTracksFromRelease(id);
+            }
+        } catch (Exception ex) {
+            log.error("Error fetching tracklist from Discogs: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<String> getTracksFromMaster(String masterId) {
+        log.info("Fetching master {} to get main release", masterId);
+
+        var masterResponse = client.get()
+                .uri(uriBuilder -> {
+                    uriBuilder.path("/masters/" + masterId);
+                    if (!apiToken.isEmpty()) {
+                        uriBuilder.queryParam("token", apiToken);
+                    }
+                    return uriBuilder.build();
+                })
+                .retrieve()
+                .body(DiscogsReleaseResponse.class);
+
+        if (masterResponse == null || masterResponse.mainRelease() == null) {
+            log.warn("No main release found for master {}", masterId);
+            return List.of();
+        }
+        return getTracksFromRelease(String.valueOf(masterResponse.mainRelease()));
+    }
+
+    private List<String> getTracksFromRelease(String releaseId) {
+        log.info("Fetching tracklist for release {}", releaseId);
+
+        var response = client.get()
+                .uri(uriBuilder -> {
+                    uriBuilder.path("/releases/" + releaseId);
+                    if (!apiToken.isEmpty()) {
+                        uriBuilder.queryParam("token", apiToken);
+                    }
+                    return uriBuilder.build();
+                })
+                .retrieve()
+                .body(DiscogsReleaseResponse.class);
+
+        if (response == null || response.tracklist() == null) {
+            log.warn("No tracklist found for release {}", releaseId);
+            return List.of();
+        }
+
+        return response.tracklist().stream()
+                .map(DiscogsReleaseResponse.Track::title)
+                .toList();
     }
 
     @Override

@@ -42,7 +42,7 @@ public class ReleaseSearchFlowService {
         if (releases.isEmpty()) {
             var buttons = buildSearchButtons(searchRequest);
             buttons.put("⛏️", "DIG_DEEPER");
-            return List.of(BotResponse.withButtons("😔 нич не знайшов в %s.".formatted(engine.getName()), buttons));
+            return List.of(BotResponse.withButtons("😔 нич не знайшов в тому %s.".formatted(engine.getName()), buttons));
         }
         return buildPageResponse(chatId, 0);
     }
