@@ -189,6 +189,17 @@ public class DiscogsClient implements SearchEngineService {
                 .distinct()
                 .toList();
 
+        List<String> tags = groupResults.stream()
+                .flatMap(r -> r.style() != null ? r.style().stream() : java.util.stream.Stream.empty())
+                .collect(Collectors.groupingBy(
+                        java.util.function.Function.identity(),
+                        Collectors.counting()
+                ))
+                .entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList(); // Keep all tags, display will be limited
+
         // Construct releaseId for unique identification
         String releaseId = "discogs:" + (representative.masterId() != null && representative.masterId() != 0 ?
                 "master:" + representative.masterId() :
@@ -211,7 +222,8 @@ public class DiscogsClient implements SearchEngineService {
                 0,
                 groupResults.size(),
                 List.of(),
-                representative.coverImage() // Use Discogs cover image URL
+                representative.coverImage(), // Use Discogs cover image URL
+                tags
         );
     }
 

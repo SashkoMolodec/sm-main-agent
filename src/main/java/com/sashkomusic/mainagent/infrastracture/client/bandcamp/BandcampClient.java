@@ -124,6 +124,7 @@ public class BandcampClient implements SearchEngineService {
                     String url = extractUrl(element);
                     String imageUrl = extractImageUrl(element);
                     String year = extractYear(element);
+                    List<String> tags = extractTags(element);
 
                     if (!title.isEmpty() && !url.isEmpty()) {
                         results.add(new BandcampSearchResponse.Result(
@@ -132,7 +133,8 @@ public class BandcampClient implements SearchEngineService {
                                 type,
                                 url,
                                 imageUrl,
-                                year
+                                year,
+                                tags
                         ));
                     }
                 } catch (Exception ex) {
@@ -214,6 +216,34 @@ public class BandcampClient implements SearchEngineService {
         return "";
     }
 
+    private List<String> extractTags(Element element) {
+        // Tags are in <div class="tags">
+        Element tagsElement = element.selectFirst("div.tags");
+        if (tagsElement != null) {
+            // Try to get individual tag links first
+            var tagLinks = tagsElement.select("a");
+            if (!tagLinks.isEmpty()) {
+                return tagLinks.stream()
+                        .map(Element::text)
+                        .filter(t -> !t.isEmpty())
+                        .filter(t -> !t.endsWith(":")) // Filter out labels like "tags:"
+                        .toList();
+            }
+
+            // Fallback: parse text and split by comma or whitespace
+            String tagsText = tagsElement.text().trim();
+            if (!tagsText.isEmpty()) {
+                return List.of(tagsText.split("[,\\s]+"))
+                        .stream()
+                        .map(String::trim)
+                        .filter(t -> !t.isEmpty())
+                        .filter(t -> !t.endsWith(":")) // Filter out labels like "tags:"
+                        .toList();
+            }
+        }
+        return List.of();
+    }
+
     private boolean hasNextPage(String html) {
         try {
             Document doc = Jsoup.parse(html);
@@ -288,6 +318,18 @@ public class BandcampClient implements SearchEngineService {
                 .sorted()
                 .toList();
 
+        // Aggregate tags by frequency (most common first)
+        List<String> tags = groupResults.stream()
+                .flatMap(r -> r.tags() != null ? r.tags().stream() : java.util.stream.Stream.empty())
+                .collect(Collectors.groupingBy(
+                        java.util.function.Function.identity(),
+                        Collectors.counting()
+                ))
+                .entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList(); // Keep all tags, display will be limited
+
         // Create shorter release ID using URL hash to stay under Telegram's 64-byte limit
         // Format: "bandcamp:hash" where hash is a short hex string
         String releaseId = "bandcamp:" + Integer.toHexString(url.hashCode());
@@ -304,7 +346,8 @@ public class BandcampClient implements SearchEngineService {
                 0,
                 groupResults.size(),
                 List.of(),
-                imageUrl
+                imageUrl,
+                tags
         );
     }
 

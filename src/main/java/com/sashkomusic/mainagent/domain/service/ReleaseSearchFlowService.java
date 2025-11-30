@@ -84,6 +84,7 @@ public class ReleaseSearchFlowService {
     private static BotResponse buildReleaseCard(ReleaseMetadata release, MetadataSearchRequest searchRequest) {
         String metadataLine = "%s • %s".formatted(release.getYearsDisplay(), release.getTypesDisplay());
         metadataLine = addTrackCount(metadataLine, release.getTrackCountDisplay());
+        metadataLine = addTags(metadataLine, release.getTagsDisplay());
 
         String cardText = """
                 💿 %s
@@ -168,5 +169,12 @@ public class ReleaseSearchFlowService {
             return metadataLine;
         }
         return metadataLine + " • " + trackCount + " тр.";
+    }
+
+    private static String addTags(String metadataLine, String tags) {
+        if (tags == null || tags.isEmpty()) {
+            return metadataLine;
+        }
+        return metadataLine + " • " + tags;
     }
 }

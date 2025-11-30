@@ -14,17 +14,12 @@ public record ReleaseMetadata(
         int maxTracks,
         int totalReleasesFound,
         List<String> trackTitles,
-        String coverUrl
+        String coverUrl,
+        List<String> tags
 ) {
 
     public String getCoverArtUrl() {
-        if (coverUrl != null && !coverUrl.isBlank()) {
-            return coverUrl;
-        }
-        if (masterId != null && !masterId.isBlank()) {
-            return "https://coverartarchive.org/release-group/" + masterId + "/front-500";
-        }
-        return null;
+        return coverUrl;
     }
 
     public String getTrackCountDisplay() {
@@ -53,6 +48,13 @@ public record ReleaseMetadata(
         return String.join(", ", types);
     }
 
+    public String getTagsDisplay() {
+        if (tags == null || tags.isEmpty()) return "";
+        return tags.stream()
+                .limit(7)
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
     public ReleaseMetadata withTracks(List<String> tracks) {
         return new ReleaseMetadata(
                 this.id,
@@ -66,7 +68,8 @@ public record ReleaseMetadata(
                 this.maxTracks,
                 this.totalReleasesFound,
                 tracks,
-                this.coverUrl
+                this.coverUrl,
+                this.tags
         );
     }
 }

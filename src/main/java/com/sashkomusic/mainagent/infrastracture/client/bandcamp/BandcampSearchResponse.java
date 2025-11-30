@@ -9,7 +9,8 @@ public record BandcampSearchResponse(List<Result> results) {
             String type,
             String url,
             String imageUrl,
-            String year
+            String year,
+            List<String> tags
     ) {
     }
 }

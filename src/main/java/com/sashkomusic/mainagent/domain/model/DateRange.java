@@ -50,7 +50,6 @@ public record DateRange(Integer from, Integer to) {
         if (isSingleYear()) {
             return String.valueOf(from);
         }
-        // Discogs doesn't support ranges in year parameter, use first year
-        return String.valueOf(from);
+        return from + "-" + to;
     }
 }

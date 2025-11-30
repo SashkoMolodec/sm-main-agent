@@ -5,12 +5,8 @@ import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.SearchContext;
-import com.sashkomusic.mainagent.domain.service.download.DownloadOptionsAnalyzer;
-import lombok.Getter;
-import lombok.Setter;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,12 +16,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SearchContextHolder {
     private final Map<String, ReleaseMetadata> releaseMetadata = new ConcurrentHashMap<>();
     private final Map<Long, SearchContext> userSearches = new ConcurrentHashMap<>();
-    @Getter
-    @Setter
-    private List<DownloadOptionsAnalyzer.OptionReport> downloadOptionReports = new ArrayList<>();
-    @Getter
-    @Setter
-    private String chosenReleaseForDownload;
 
     public ReleaseMetadata getReleaseMetadata(String releaseId) {
         return releaseMetadata.get(releaseId);

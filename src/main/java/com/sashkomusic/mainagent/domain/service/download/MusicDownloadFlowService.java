@@ -3,6 +3,7 @@ package com.sashkomusic.mainagent.domain.service.download;
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.service.DownloadContextHolder;
 import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
 import com.sashkomusic.mainagent.messaging.consumer.dto.SearchFilesResultDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.DownloadFilesTaskDto;
@@ -25,6 +26,7 @@ public class MusicDownloadFlowService {
     private final SearchFilesTaskProducer searchFilesProducer;
     private final DownloadTaskProducer downloadTaskProducer;
     private final SearchContextHolder contextService;
+    private final DownloadContextHolder downloadContextHolder;
     private final DownloadOptionsAnalyzer analyzer;
     private final DownloadOptionsFormatter formatter;
 
@@ -59,15 +61,14 @@ public class MusicDownloadFlowService {
 
         var analysisResult = analyzer.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
-        contextService.setDownloadOptionReports(reports);
-        contextService.setChosenReleaseForDownload(dto.releaseId());
+        downloadContextHolder.saveDownloadOptions(dto.chatId(), dto.releaseId(), reports);
 
         reports.forEach(r -> log.info("{}", r));
         return formatter.format(reports, analysisResult.aiSummary());
     }
 
     public List<BotResponse> handleDownload(long chatId, String rawInput) {
-        var reports = contextService.getDownloadOptionReports();
+        var reports = downloadContextHolder.getDownloadOptions(chatId);
         if (reports.isEmpty()) {
             return List.of(BotResponse.text("😔 **варіанти пропали, нич нема, давай ше раз.**"));
         }
@@ -79,7 +80,7 @@ public class MusicDownloadFlowService {
 
         var chosenReport = reports.get(optionNumber - 1);
         var option = chosenReport.option();
-        String releaseId = contextService.getChosenReleaseForDownload();
+        String releaseId = downloadContextHolder.getChosenRelease(chatId);
 
         log.info("User chose option #{}: {} from {}", optionNumber, option.id(), option.distributorName());
 

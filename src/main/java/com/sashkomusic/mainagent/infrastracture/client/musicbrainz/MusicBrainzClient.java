@@ -5,6 +5,7 @@ import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.service.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
@@ -57,7 +58,8 @@ public class MusicBrainzClient implements SearchEngineService {
                             .path("/release")
                             .queryParam("query", luceneQuery)
                             .queryParam("fmt", "json")
-                            .queryParam("limit", defineResponseLimit(luceneQuery))
+                            .queryParam("limit", 150)
+                            .queryParam("inc", "tags")
                             .build())
                     .retrieve()
                     .body(MusicBrainzSearchResponse.class);
@@ -245,12 +247,6 @@ public class MusicBrainzClient implements SearchEngineService {
                 .toList();
     }
 
-    private static int defineResponseLimit(String query) {
-        if (!query.contains("artist") || !query.contains("release")) {
-            return 100;
-        } else return 1;
-    }
-
     private ReleaseMetadata aggregateGroup(List<MusicBrainzSearchResponse.Release> groupReleases) {
         IntSummaryStatistics trackStats = groupReleases.stream()
                 .mapToInt(this::getTrackCount)
@@ -274,11 +270,20 @@ public class MusicBrainzClient implements SearchEngineService {
                 .sorted()
                 .toList();
 
+        List<String> tags = groupReleases.stream()
+                .flatMap(r -> r.tags() != null ? r.tags().stream() : Stream.empty())
+                .sorted(Comparator.comparingInt(MusicBrainzSearchResponse.Tag::count).reversed())
+                .map(MusicBrainzSearchResponse.Tag::name)
+                .distinct()
+                .toList(); // Keep all tags, display will be limited
+
         var representative = groupReleases.stream().min(Comparator.comparingInt(MusicBrainzSearchResponse.Release::score).reversed()
                         .thenComparing(r -> "Official".equals(r.status()) ? 0 : 1)
                         .thenComparing(r -> r.date() != null ? r.date() : "9999")
                         .thenComparingInt(r -> r.title().length()))
                 .orElse(groupReleases.getFirst());
+
+        String coverUrl = getCoverUrl(representative);
 
         return new ReleaseMetadata(
                 representative.id(),
@@ -292,8 +297,16 @@ public class MusicBrainzClient implements SearchEngineService {
                 maxTracks,
                 groupReleases.size(),
                 List.of(),
-                null // MusicBrainz doesn't provide cover URLs, will fallback to CoverArtArchive
+                coverUrl,
+                tags
         );
+    }
+
+    @Nullable
+    private static String getCoverUrl(MusicBrainzSearchResponse.Release representative) {
+        return representative.releaseGroup() != null && representative.releaseGroup().id() != null
+                ? "https://coverartarchive.org/release-group/" + representative.releaseGroup().id() + "/front-500"
+                : null;
     }
 
     private int getTrackCount(MusicBrainzSearchResponse.Release r) {
