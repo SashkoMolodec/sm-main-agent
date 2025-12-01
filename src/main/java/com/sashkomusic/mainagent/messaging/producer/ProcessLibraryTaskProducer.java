@@ -15,7 +15,7 @@ public class ProcessLibraryTaskProducer {
     private final KafkaTemplate<String, ProcessLibraryTaskDto> kafkaTemplate;
 
     public void send(ProcessLibraryTaskDto dto) {
-        log.info("Sending library processing task: masterId={}, files={}", dto.masterId(), dto.downloadedFiles().size());
+        log.info("Sending library processing task: masterId={}, files={}", dto.metadata().masterId(), dto.downloadedFiles().size());
         kafkaTemplate.send(TASKS_TOPIC, dto);
     }
 }

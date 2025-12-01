@@ -38,9 +38,9 @@ public class DownloadBatchCompleteListener {
 
             ProcessLibraryTaskDto libraryTask = ProcessLibraryTaskDto.of(
                     batchComplete.chatId(),
-                    masterId,
                     batchComplete.directoryPath(),
-                    batchComplete.allFiles()
+                    batchComplete.allFiles(),
+                    metadata
             );
 
             libraryTaskProducer.send(libraryTask);
