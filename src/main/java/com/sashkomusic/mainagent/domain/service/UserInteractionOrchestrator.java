@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 
 import static com.sashkomusic.mainagent.domain.model.SearchEngine.BANDCAMP;
@@ -22,8 +23,12 @@ public class UserInteractionOrchestrator {
     private final AiService analyzer;
     private final MusicDownloadFlowService musicDownloadFlowService;
     private final ReleaseSearchFlowService releaseSearchFlowService;
+    private final ProcessFolderFlowService processFolderFlowService;
 
     public List<BotResponse> handleUserRequest(long chatId, String rawInput) {
+        var res = processUserCommands(chatId, rawInput);
+        if (!res.isEmpty()) return res;
+
         UserIntent intent = analyzer.classifyIntent(rawInput);
         log.info("Identified intent: {}", intent);
 
@@ -48,6 +53,22 @@ public class UserInteractionOrchestrator {
             return releaseSearchFlowService.switchStrategyAndSearch(chatId);
         }
         return List.of(BotResponse.text("хз, пупупу"));
+    }
+
+    private List<BotResponse> processUserCommands(long chatId, String rawInput) {
+        if (rawInput.startsWith("/process")) {
+            return handleProcessCommand(chatId, rawInput);
+        }
+
+        if (processFolderFlowService.hasActiveContext(chatId)) {
+            return processFolderFlowService.handleMetadataSelection(chatId, rawInput);
+        }
+        return Collections.emptyList();
+    }
+
+    private List<BotResponse> handleProcessCommand(long chatId, String rawInput) {
+        String folderName = rawInput.substring(9).trim();
+        return processFolderFlowService.process(chatId, folderName);
     }
 
     private static int getPage(String data) {

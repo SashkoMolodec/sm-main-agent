@@ -28,13 +28,11 @@ public class LibraryProcessingCompleteListener {
     private String buildResultMessage(LibraryProcessingCompleteDto result) {
         if (result.success()) {
             return String.format("""
-                    ✅ **реліз оброблено успішно!**
+                    ✅ **успішно!**
                     📁 `%s`
-                    **%d**
                     %s
                     """,
                     extractFolderName(result.directoryPath()),
-                    result.processedFiles().size(),
                     formatProcessedFiles(result.processedFiles())
             );
         } else {

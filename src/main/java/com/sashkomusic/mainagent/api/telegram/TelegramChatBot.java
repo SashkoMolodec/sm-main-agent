@@ -32,9 +32,11 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
     private final TelegramClient client;
     private final String botToken;
 
-    public TelegramChatBot(@Value("${telegram.bot.token}") String token, UserInteractionOrchestrator orchestrator) {
-        botToken = token;
-        client = new OkHttpTelegramClient(botToken);
+    public TelegramChatBot(@Value("${telegram.bot.token}") String token,
+                           UserInteractionOrchestrator orchestrator,
+                           TelegramClient telegramClient) {
+        this.botToken = token;
+        this.client = telegramClient;
         this.orchestrator = orchestrator;
     }
 
