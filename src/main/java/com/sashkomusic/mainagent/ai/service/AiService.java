@@ -144,7 +144,6 @@ public interface AiService {
             - "[Label] Artist - Album" -> artist: Artist, album: Album, year: null
             - "Artist - Album [Label]" -> artist: Artist, album: Album, year: null
             - "Year Artist - Album" -> artist: Artist, album: Album, year: Year
-            - "Album" (single word) -> artist: null, album: Album, year: null
 
             Rules:
             1. Extract the artist name exactly as written
@@ -152,7 +151,7 @@ public interface AiService {
             3. Extract 4-digit year if present
             4. Ignore label names in brackets []
             5. Return null values for fields that cannot be determined
-            6. **IMPORTANT: If input is a single word without separators (-, parentheses, brackets), treat it as album name with artist=null**
+            6. **IMPORTANT: Both artist and album must be present. If cannot extract both, return null values**
 
             Examples:
             "Jeff Mills - 2000 - Lifelike" -> {artist: "Jeff Mills", album: "Lifelike", year: "2000"}
@@ -160,8 +159,6 @@ public interface AiService {
             "Burial - Untrue" -> {artist: "Burial", album: "Untrue", year: null}
             "[Axis Records] Jeff Mills - The Bells" -> {artist: "Jeff Mills", album: "The Bells", year: null}
             "2015 Oneohtrix Point Never - Garden of Delete" -> {artist: "Oneohtrix Point Never", album: "Garden of Delete", year: "2015"}
-            "Lifelike" -> {artist: null, album: "Lifelike", year: null}
-            "Innervisions" -> {artist: null, album: "Innervisions", year: null}
 
             Return JSON object with fields: artist, album, year (all strings or null)
             """)

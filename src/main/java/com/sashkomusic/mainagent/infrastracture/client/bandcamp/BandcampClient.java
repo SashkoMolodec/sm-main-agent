@@ -332,7 +332,7 @@ public class BandcampClient implements SearchEngineService {
                 ))
                 .entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .map(Map.Entry::getKey)
+                .map(e -> e.getKey().toLowerCase())
                 .toList(); // Keep all tags, display will be limited
 
         // Create shorter release ID using URL hash to stay under Telegram's 64-byte limit

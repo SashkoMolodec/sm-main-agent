@@ -273,7 +273,7 @@ public class MusicBrainzClient implements SearchEngineService {
         List<String> tags = groupReleases.stream()
                 .flatMap(r -> r.tags() != null ? r.tags().stream() : Stream.empty())
                 .sorted(Comparator.comparingInt(MusicBrainzSearchResponse.Tag::count).reversed())
-                .map(MusicBrainzSearchResponse.Tag::name)
+                .map(t -> t.name().toLowerCase())
                 .distinct()
                 .toList(); // Keep all tags, display will be limited
 

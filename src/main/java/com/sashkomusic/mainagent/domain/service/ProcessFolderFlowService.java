@@ -62,11 +62,18 @@ public class ProcessFolderFlowService {
 
             log.info("Processing folder: {}, found {} audio files", folderName, audioFiles.size());
 
-            ReleaseIdentifierService.ReleaseInfo releaseInfo = identifierService.identifyFromFolderName(folderName);
+            var releaseInfo = identifierService.identifyFromAudioFile(audioFiles.get(0));
+            if (releaseInfo != null) {
+                log.info("Using release info from audio file tags");
+            } else {
+                log.info("No tags in audio file, trying folder name parsing");
+                releaseInfo = identifierService.identifyFromFolderName(folderName);
+            }
+
             if (releaseInfo == null) {
                 return List.of(BotResponse.text(String.format("""
                         ❌ не вдалося розпізнати назву релізу з папки: `%s`
-                        
+
                         спробуй тако:
                         • Artist - Album (Year)
                         • Artist - Album

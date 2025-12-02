@@ -5,9 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sashkomusic.mainagent.ai.service.AiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jaudiotagger.audio.AudioFile;
+import org.jaudiotagger.audio.AudioFileIO;
+import org.jaudiotagger.tag.FieldKey;
+import org.jaudiotagger.tag.Tag;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -70,8 +75,8 @@ public class ReleaseIdentifierService {
             String year = node.has("year") && !node.get("year").isNull()
                     ? node.get("year").asText() : null;
 
-            // Album is required, artist can be null (for single-word folder names)
-            if (album == null || album.isEmpty()) {
+            // Both artist and album are required
+            if (artist == null || artist.isEmpty() || album == null || album.isEmpty()) {
                 log.warn("AI returned incomplete data: artist={}, album={}", artist, album);
                 return null;
             }
@@ -115,5 +120,41 @@ public class ReleaseIdentifierService {
 
         log.warn("Could not parse folder name: {}", folderName);
         return null;
+    }
+
+    public ReleaseInfo identifyFromAudioFile(String audioFilePath) {
+        try {
+            log.debug("Attempting to read tags from audio file: {}", audioFilePath);
+
+            AudioFile audioFile = AudioFileIO.read(new File(audioFilePath));
+            Tag tag = audioFile.getTag();
+
+            if (tag == null) {
+                log.debug("No tags found in audio file");
+                return null;
+            }
+
+            String artist = tag.getFirst(FieldKey.ARTIST);
+            String album = tag.getFirst(FieldKey.ALBUM);
+            String year = tag.getFirst(FieldKey.YEAR);
+
+            if (artist == null || artist.trim().isEmpty() || album == null || album.trim().isEmpty()) {
+                log.debug("Incomplete tags in audio file: artist='{}', album='{}'", artist, album);
+                return null;
+            }
+
+            log.info("Read tags from audio file: artist='{}', album='{}', year='{}'",
+                    artist.trim(), album.trim(), year);
+
+            return new ReleaseInfo(
+                    artist.trim(),
+                    album.trim(),
+                    year != null && !year.trim().isEmpty() ? year.trim() : null
+            );
+
+        } catch (Exception e) {
+            log.debug("Could not read tags from audio file: {}", e.getMessage());
+            return null;
+        }
     }
 }

@@ -202,8 +202,9 @@ public class DiscogsClient implements SearchEngineService {
                 ))
                 .entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .map(Map.Entry::getKey)
-                .toList(); // Keep all tags, display will be limited
+                .limit(7)
+                .map(e -> e.getKey().toLowerCase())
+                .toList();
 
         // Construct releaseId for unique identification
         String releaseId = "discogs:" + (representative.masterId() != null && representative.masterId() != 0 ?

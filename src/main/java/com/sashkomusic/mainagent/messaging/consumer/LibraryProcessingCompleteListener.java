@@ -29,6 +29,7 @@ public class LibraryProcessingCompleteListener {
         if (result.success()) {
             return String.format("""
                     ✅ **успішно!**
+                    
                     📁 `%s`
                     %s
                     """,
