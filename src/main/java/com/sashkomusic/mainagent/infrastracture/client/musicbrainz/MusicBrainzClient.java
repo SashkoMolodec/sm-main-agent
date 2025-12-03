@@ -2,7 +2,8 @@ package com.sashkomusic.mainagent.infrastracture.client.musicbrainz;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.SearchEngineService;
+import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
@@ -288,6 +289,7 @@ public class MusicBrainzClient implements SearchEngineService {
         return new ReleaseMetadata(
                 representative.id(),
                 representative.releaseGroup().id(),
+                Source.MUSICBRAINZ,
                 getArtistName(representative),
                 representative.title(),
                 representative.score(),

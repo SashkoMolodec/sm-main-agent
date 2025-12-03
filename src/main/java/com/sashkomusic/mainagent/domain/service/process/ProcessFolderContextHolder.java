@@ -1,4 +1,4 @@
-package com.sashkomusic.mainagent.domain.service;
+package com.sashkomusic.mainagent.domain.service.process;
 
 import org.springframework.stereotype.Service;
 

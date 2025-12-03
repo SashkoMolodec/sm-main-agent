@@ -1,6 +1,5 @@
-package com.sashkomusic.mainagent.domain.service;
+package com.sashkomusic.mainagent.domain.service.download;
 
-import com.sashkomusic.mainagent.domain.service.download.DownloadOptionsAnalyzer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

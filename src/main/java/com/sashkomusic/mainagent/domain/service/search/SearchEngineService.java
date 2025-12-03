@@ -1,4 +1,4 @@
-package com.sashkomusic.mainagent.domain.service;
+package com.sashkomusic.mainagent.domain.service.search;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;

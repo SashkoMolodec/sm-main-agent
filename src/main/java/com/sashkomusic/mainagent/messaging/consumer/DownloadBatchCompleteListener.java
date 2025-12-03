@@ -2,7 +2,7 @@ package com.sashkomusic.mainagent.messaging.consumer;
 
 import com.sashkomusic.mainagent.api.telegram.TelegramChatBot;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
+import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.messaging.consumer.dto.DownloadBatchCompleteDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.ProcessLibraryTaskDto;
 import com.sashkomusic.mainagent.messaging.producer.ProcessLibraryTaskProducer;
@@ -18,7 +18,7 @@ public class DownloadBatchCompleteListener {
 
     private final TelegramChatBot chatBot;
     private final ProcessLibraryTaskProducer libraryTaskProducer;
-    private final SearchContextHolder contextHolder;
+    private final SearchContextService contextHolder;
 
     @KafkaListener(topics = "download-batch-complete", groupId = "main-agent-group")
     public void handleBatchComplete(DownloadBatchCompleteDto batchComplete) {

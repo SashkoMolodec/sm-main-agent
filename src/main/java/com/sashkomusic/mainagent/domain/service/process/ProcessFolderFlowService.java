@@ -1,10 +1,11 @@
-package com.sashkomusic.mainagent.domain.service;
+package com.sashkomusic.mainagent.domain.service.process;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.Language;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.infrastracture.client.bandcamp.BandcampClient;
 import com.sashkomusic.mainagent.infrastracture.client.discogs.DiscogsClient;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.MusicBrainzClient;
@@ -36,7 +37,7 @@ public class ProcessFolderFlowService {
     private final DiscogsClient discogsClient;
     private final BandcampClient bandcampClient;
     private final ReleaseIdentifierService identifierService;
-    private final SearchContextHolder searchContextHolder;
+    private final SearchContextService searchContextService;
     private final ProcessFolderContextHolder contextHolder;
     private final ProcessLibraryTaskProducer libraryTaskProducer;
     private final AiService aiService;
@@ -140,7 +141,7 @@ public class ProcessFolderFlowService {
             return List.of(BotResponse.text("❌ контекст втрачено. спробуй /process ще раз"));
         }
 
-        ReleaseMetadata metadata = searchContextHolder.getReleaseMetadata(releaseId);
+        ReleaseMetadata metadata = searchContextService.getMetadataWithTracks(releaseId, chatId);
         if (metadata == null) {
             return List.of(BotResponse.text("❌ метадані не знайдено"));
         }
@@ -176,7 +177,7 @@ public class ProcessFolderFlowService {
     private void storeSearchResults(long chatId, List<ReleaseMetadata> allResults) {
         List<String> allReleaseIds = new ArrayList<>();
         for (ReleaseMetadata result : allResults) {
-            searchContextHolder.saveReleaseMetadata(result);
+            searchContextService.saveReleaseMetadata(result);
             allReleaseIds.add(result.id());
         }
         contextHolder.storeReleaseIds(chatId, allReleaseIds);
@@ -222,8 +223,6 @@ public class ProcessFolderFlowService {
             appendResults(message, bandcampResults, optionIndex);
             message.append("\n");
         }
-
-        message.append("**обери варіант**");
         return BotResponse.text(message.toString());
     }
 

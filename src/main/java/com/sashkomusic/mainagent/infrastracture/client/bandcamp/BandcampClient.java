@@ -2,8 +2,9 @@ package com.sashkomusic.mainagent.infrastracture.client.bandcamp;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
-import com.sashkomusic.mainagent.domain.service.SearchEngineService;
+import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
+import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -19,9 +20,9 @@ import java.util.stream.Collectors;
 public class BandcampClient implements SearchEngineService {
 
     private final RestClient client;
-    private final SearchContextHolder contextHolder;
+    private final SearchContextService contextHolder;
 
-    public BandcampClient(RestClient.Builder builder, SearchContextHolder contextHolder) {
+    public BandcampClient(RestClient.Builder builder, SearchContextService contextHolder) {
         this.contextHolder = contextHolder;
         this.client = builder
                 .baseUrl("https://bandcamp.com")
@@ -342,6 +343,7 @@ public class BandcampClient implements SearchEngineService {
         return new ReleaseMetadata(
                 releaseId,
                 url, // Store full URL in masterId field for later retrieval
+                Source.BANDCAMP,
                 artist,
                 title,
                 80, // Default score for Bandcamp results (lower than Discogs/MusicBrainz)

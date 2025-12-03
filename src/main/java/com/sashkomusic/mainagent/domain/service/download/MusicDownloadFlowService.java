@@ -3,8 +3,7 @@ package com.sashkomusic.mainagent.domain.service.download;
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.DownloadContextHolder;
-import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
+import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.messaging.consumer.dto.SearchFilesResultDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.DownloadFilesTaskDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.SearchFilesTaskDto;
@@ -24,7 +23,7 @@ public class MusicDownloadFlowService {
     private final AiService aiService;
     private final SearchFilesTaskProducer searchFilesProducer;
     private final DownloadTaskProducer downloadTaskProducer;
-    private final SearchContextHolder contextService;
+    private final SearchContextService contextService;
     private final DownloadContextHolder downloadContextHolder;
     private final DownloadOptionsAnalyzer analyzer;
     private final DownloadOptionsFormatter formatter;

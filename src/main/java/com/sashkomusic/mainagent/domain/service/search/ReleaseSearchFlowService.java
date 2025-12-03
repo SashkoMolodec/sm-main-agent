@@ -1,4 +1,4 @@
-package com.sashkomusic.mainagent.domain.service;
+package com.sashkomusic.mainagent.domain.service.search;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
@@ -24,7 +24,7 @@ public class ReleaseSearchFlowService {
 
     private final AiService analyzer;
     private final Map<SearchEngine, SearchEngineService> searchEngines;
-    private final SearchContextHolder contextService;
+    private final SearchContextService contextService;
 
     public List<BotResponse> search(long chatId, String rawInput, SearchEngine searchEngine) {
         log.info("Searching with engine: {}", searchEngine);

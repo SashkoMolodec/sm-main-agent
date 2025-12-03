@@ -2,7 +2,8 @@ package com.sashkomusic.mainagent.infrastracture.client.discogs;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.service.SearchEngineService;
+import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -219,6 +220,7 @@ public class DiscogsClient implements SearchEngineService {
         return new ReleaseMetadata(
                 releaseId,
                 masterId,
+                Source.DISCOGS,
                 artist,
                 title,
                 100, // Default score for Discogs results

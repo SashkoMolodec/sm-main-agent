@@ -3,16 +3,13 @@ package com.sashkomusic.mainagent.domain.service.download;
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.model.SearchEngine;
-import com.sashkomusic.mainagent.domain.service.SearchEngineService;
-import com.sashkomusic.mainagent.domain.service.SearchContextHolder;
+import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
@@ -20,8 +17,7 @@ import java.util.stream.Collectors;
 public class DownloadOptionsAnalyzer {
 
     private final AiService aiService;
-    private final SearchContextHolder contextService;
-    private final Map<SearchEngine, SearchEngineService> searchEngines;
+    private final SearchContextService contextService;
 
     public record OptionReport(
             DownloadOption option,
@@ -40,7 +36,7 @@ public class DownloadOptionsAnalyzer {
             return new AnalysisResult(java.util.List.of(), "");
         }
 
-        final var enrichedMetadata = updateMetadataWithTracks(releaseId, chatId);
+        final var enrichedMetadata = contextService.getMetadataWithTracks(releaseId, chatId);
         var reports = options.stream()
                 .map(opt -> new OptionReport(opt, resolveSuitabilityLevel(opt, enrichedMetadata)))
                 .sorted(Comparator.comparing(OptionReport::suitability))
@@ -61,22 +57,6 @@ public class DownloadOptionsAnalyzer {
         );
 
         return new AnalysisResult(reports, aiSummary);
-    }
-
-    @NotNull
-    private ReleaseMetadata updateMetadataWithTracks(String releaseId, long chatId) {
-        var metadata = contextService.getReleaseMetadata(releaseId);
-        if (metadata.trackTitles() == null || metadata.trackTitles().isEmpty()) {
-            SearchEngineService engine = searchEngines.get(contextService.getSearchEngine(chatId));
-
-            var tracks = engine.getTracks(releaseId);
-            var metadataWithTracks = metadata.withTracks(tracks);
-            contextService.saveReleaseMetadata(metadataWithTracks);
-
-            return metadataWithTracks;
-        } else {
-            return metadata;
-        }
     }
 
     @NotNull

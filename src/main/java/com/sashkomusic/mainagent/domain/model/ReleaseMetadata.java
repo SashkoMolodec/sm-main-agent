@@ -5,6 +5,7 @@ import java.util.List;
 public record ReleaseMetadata(
         String id,
         String masterId,
+        Source source,
         String artist,
         String title,
         int score,
@@ -59,6 +60,7 @@ public record ReleaseMetadata(
         return new ReleaseMetadata(
                 this.id,
                 this.masterId,
+                this.source,
                 this.artist,
                 this.title,
                 this.score,

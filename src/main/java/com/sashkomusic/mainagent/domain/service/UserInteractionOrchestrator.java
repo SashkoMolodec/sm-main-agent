@@ -4,6 +4,8 @@ import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.UserIntent;
 import com.sashkomusic.mainagent.domain.service.download.MusicDownloadFlowService;
+import com.sashkomusic.mainagent.domain.service.process.ProcessFolderFlowService;
+import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
