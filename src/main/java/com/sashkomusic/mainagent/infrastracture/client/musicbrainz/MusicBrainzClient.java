@@ -290,6 +290,15 @@ public class MusicBrainzClient implements SearchEngineService {
         String cleanArtist = clean(getArtistName(representative));
         String cleanTitle = clean(representative.title());
 
+        // Extract label from labelInfo
+        String label = groupReleases.stream()
+                .filter(r -> r.labelInfo() != null && !r.labelInfo().isEmpty())
+                .flatMap(r -> r.labelInfo().stream())
+                .filter(li -> li.label() != null && li.label().name() != null)
+                .map(li -> li.label().name())
+                .findFirst()
+                .orElse("");
+
         return new ReleaseMetadata(
                 representative.id(),
                 representative.releaseGroup().id(),
@@ -304,7 +313,8 @@ public class MusicBrainzClient implements SearchEngineService {
                 groupReleases.size(),
                 List.of(),
                 coverUrl,
-                tags
+                tags,
+                label
         );
     }
 

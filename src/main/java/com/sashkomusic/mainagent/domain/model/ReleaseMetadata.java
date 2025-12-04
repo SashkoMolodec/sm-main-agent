@@ -16,7 +16,8 @@ public record ReleaseMetadata(
         int totalReleasesFound,
         List<String> trackTitles,
         String coverUrl,
-        List<String> tags
+        List<String> tags,
+        String label
 ) {
 
     public String getCoverArtUrl() {
@@ -56,6 +57,11 @@ public record ReleaseMetadata(
                 .collect(java.util.stream.Collectors.joining(", "));
     }
 
+    public String getLabelDisplay() {
+        if (label == null || label.isBlank()) return "";
+        return label;
+    }
+
     public ReleaseMetadata withTracks(List<String> tracks) {
         return new ReleaseMetadata(
                 this.id,
@@ -71,7 +77,8 @@ public record ReleaseMetadata(
                 this.totalReleasesFound,
                 tracks,
                 this.coverUrl,
-                this.tags
+                this.tags,
+                this.label
         );
     }
 }

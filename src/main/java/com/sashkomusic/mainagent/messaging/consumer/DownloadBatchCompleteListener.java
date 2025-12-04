@@ -52,18 +52,35 @@ public class DownloadBatchCompleteListener {
     }
 
     private String buildCompletionMessage(DownloadBatchCompleteDto batch) {
-        String folderName = extractFolderName(batch.directoryPath());
-        return "🎉 **весь реліз скачавсі!** 📂 `%s` (%d файлів)".formatted(folderName, batch.totalFiles());
+        String[] pathParts = extractPathParts(batch.directoryPath());
+        String artist = pathParts[0];
+        String release = pathParts[1];
+
+        StringBuilder message = new StringBuilder();
+        message.append("✅ **додано в лібку!**\n");
+        message.append("`%s` → `%s`\n\n".formatted(artist, release));
+
+        for (String track : batch.allFiles()) {
+            message.append("`%s`\n".formatted(track));
+        }
+        return message.toString();
     }
 
-    private String extractFolderName(String path) {
+    private String[] extractPathParts(String path) {
         if (path == null || path.isEmpty()) {
-            return "";
+            return new String[]{"Unknown", "Unknown"};
         }
-        int lastSlash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
-        if (lastSlash >= 0) {
-            return path.substring(lastSlash + 1);
+
+        String[] parts = path.split("[/\\\\]");
+
+        if (parts.length >= 2) {
+            String release = parts[parts.length - 1];
+            String artist = parts[parts.length - 2];
+            return new String[]{artist, release};
+        } else if (parts.length == 1) {
+            return new String[]{"Unknown", parts[0]};
         }
-        return path;
+
+        return new String[]{"Unknown", "Unknown"};
     }
 }

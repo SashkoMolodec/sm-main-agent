@@ -186,6 +186,13 @@ public class DiscogsClient implements SearchEngineService {
                 String.valueOf(representative.masterId()) :
                 null;
 
+        // Extract label from Discogs label list
+        String label = groupResults.stream()
+                .filter(r -> r.label() != null && !r.label().isEmpty())
+                .flatMap(r -> r.label().stream())
+                .findFirst()
+                .orElse("");
+
         return new ReleaseMetadata(
                 releaseId,
                 masterId,
@@ -200,7 +207,8 @@ public class DiscogsClient implements SearchEngineService {
                 groupResults.size(),
                 List.of(),
                 representative.coverImage(), // Use Discogs cover image URL
-                tags
+                tags,
+                label
         );
     }
 

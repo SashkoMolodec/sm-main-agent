@@ -359,7 +359,8 @@ public class BandcampClient implements SearchEngineService {
                 groupResults.size(),
                 List.of(),
                 imageUrl,
-                tags
+                tags,
+                "" // Label not available from Bandcamp
         );
     }
 
