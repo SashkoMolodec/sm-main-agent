@@ -111,7 +111,21 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
                     .build();
             client.execute(message);
         } catch (TelegramApiException e) {
-            log.error("❌ Failed to send text message to [{}]: {}", chatId, e.getMessage());
+            log.error("❌ Failed to send with Markdown parsing to [{}]: {}. Retrying as plain text",
+                    chatId, e.getMessage());
+
+            // Fallback: send as plain text without parsing
+            try {
+                SendMessage plainMessage = SendMessage.builder()
+                        .chatId(chatId)
+                        .text(response.text())
+                        .replyMarkup(keyboardMarkup)
+                        .build();
+                client.execute(plainMessage);
+                log.info("✅ Successfully sent as plain text");
+            } catch (TelegramApiException ex) {
+                log.error("❌ Failed to send even as plain text to [{}]: {}", chatId, ex.getMessage());
+            }
         }
     }
 

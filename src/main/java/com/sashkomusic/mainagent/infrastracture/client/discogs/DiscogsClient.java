@@ -61,79 +61,45 @@ public class DiscogsClient implements SearchEngineService {
                 .queryParam("type", "master,release")
                 .queryParam("per_page", "200");
 
-        int filledFieldCount = 0;
-        String singleValue = null;
+        // Build general query from all available fields
+        List<String> queryParts = new ArrayList<>();
 
         if (!request.artist().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.artist();
+            queryParts.add(request.artist());
         }
 
         boolean hasRelease = !request.release().isEmpty();
         boolean hasRecording = !request.recording().isEmpty();
-        if (hasRelease || hasRecording) {
-            filledFieldCount++;
-            singleValue = hasRelease ? request.release() : request.recording();
+        if (hasRelease) {
+            queryParts.add(request.release());
+        } else if (hasRecording) {
+            queryParts.add(request.recording());
         }
 
         if (request.dateRange() != null && !request.dateRange().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.dateRange().toDiscogsParam();
+            queryParts.add(request.dateRange().toDiscogsParam());
         }
         if (!request.format().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.format();
+            queryParts.add(request.format());
         }
         if (!request.catno().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.catno();
+            queryParts.add(request.catno());
         }
         if (!request.label().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.label();
+            queryParts.add(request.label());
         }
         if (!request.style().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.style();
+            queryParts.add(request.style());
         }
         if (!request.country().isEmpty()) {
-            filledFieldCount++;
-            singleValue = request.country();
+            queryParts.add(request.country());
         }
 
-        if (filledFieldCount == 1) {
-            log.info("Using general 'q' search with value: {}", singleValue);
-            builder.queryParam("q", singleValue);
-        } else {
-            log.info("Using specific field search with {} parameters", filledFieldCount);
-            if (!request.artist().isEmpty()) {
-                builder.queryParam("artist", request.artist());
-            }
-
-            if (hasRelease) {
-                builder.queryParam("release_title", request.release());
-            } else if (hasRecording) {
-                builder.queryParam("track", request.recording());
-            }
-
-            if (request.dateRange() != null && !request.dateRange().isEmpty()) {
-                builder.queryParam("year", request.dateRange().toDiscogsParam());
-            }
-            if (!request.format().isEmpty()) {
-                builder.queryParam("format", request.format());
-            }
-            if (!request.catno().isEmpty()) {
-                builder.queryParam("catno", request.catno());
-            }
-            if (!request.label().isEmpty()) {
-                builder.queryParam("label", request.label());
-            }
-            if (!request.style().isEmpty()) {
-                builder.queryParam("style", request.style());
-            }
-            if (!request.country().isEmpty()) {
-                builder.queryParam("country", request.country());
-            }
+        // Combine all parts into single query
+        if (!queryParts.isEmpty()) {
+            String generalQuery = String.join(" ", queryParts);
+            log.info("Using general 'q' search with value: {}", generalQuery);
+            builder.queryParam("q", generalQuery);
         }
 
         if (!apiToken.isEmpty()) {
@@ -174,6 +140,9 @@ public class DiscogsClient implements SearchEngineService {
 
         String artist = extractArtist(representative.title());
         String title = extractTitle(representative.title());
+
+        artist = clean(artist);
+        title = clean(title);
 
         List<String> years = groupResults.stream()
                 .map(DiscogsSearchResponse.Result::year)
@@ -251,6 +220,13 @@ public class DiscogsClient implements SearchEngineService {
             return fullTitle.substring(dashIndex + 3).trim();
         }
         return fullTitle;
+    }
+
+    private String clean(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        return text.replaceAll("[*?\\[\\]{}|<>\"'`]", "").trim();
     }
 
     @Override

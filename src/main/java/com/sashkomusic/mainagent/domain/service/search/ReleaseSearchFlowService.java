@@ -6,6 +6,7 @@ import com.sashkomusic.mainagent.domain.model.Language;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.util.ReleaseCardFormatter;
 import com.sashkomusic.mainagent.domain.util.SearchUrlUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,27 @@ public class ReleaseSearchFlowService {
         }
     }
 
+    public SearchResult searchWithFallback(String query, SearchEngine... engines) {
+        var searchRequest = analyzer.buildSearchRequest(query);
+
+        for (SearchEngine engine : engines) {
+            log.info("Trying to search in {}", engine);
+            var searchEngineService = searchEngines.get(engine);
+            var releases = searchEngineService.searchReleases(searchRequest);
+
+            if (!releases.isEmpty()) {
+                log.info("Found {} releases in {}", releases.size(), engine);
+                return new SearchResult(releases, engine, searchRequest);
+            }
+        }
+
+        log.warn("No releases found in any engine for query: {}", query);
+        return new SearchResult(List.of(), null, searchRequest);
+    }
+
+    public record SearchResult(List<ReleaseMetadata> releases, SearchEngine engine, MetadataSearchRequest searchRequest) {
+    }
+
     public List<BotResponse> buildPageResponse(long chatId, int page) {
         var releases = contextService.getSearchResults(chatId);
         var searchRequest = contextService.getSearchRequest(chatId);
@@ -82,19 +104,7 @@ public class ReleaseSearchFlowService {
     }
 
     private static BotResponse buildReleaseCard(ReleaseMetadata release, MetadataSearchRequest searchRequest) {
-        String metadataLine = "%s • %s".formatted(release.getYearsDisplay(), release.getTypesDisplay());
-        metadataLine = addTrackCount(metadataLine, release.getTrackCountDisplay());
-        metadataLine = addTags(metadataLine, release.getTagsDisplay());
-
-        String cardText = """
-                💿 %s
-                👤 %s
-                %s
-                """.formatted(
-                release.title(),
-                release.artist(),
-                metadataLine
-        ).toLowerCase();
+        String cardText = ReleaseCardFormatter.formatCardText(release);
 
         Map<String, String> buttons = new LinkedHashMap<>();
         buttons.put("▶️", buildYoutubeUrl(release.artist(), release.title()));
@@ -164,17 +174,4 @@ public class ReleaseSearchFlowService {
         return "URL:" + url;
     }
 
-    private static String addTrackCount(String metadataLine, String trackCount) {
-        if (trackCount == null || trackCount.isEmpty()) {
-            return metadataLine;
-        }
-        return metadataLine + " • " + trackCount + " тр.";
-    }
-
-    private static String addTags(String metadataLine, String tags) {
-        if (tags == null || tags.isEmpty()) {
-            return metadataLine;
-        }
-        return metadataLine + " • " + tags;
-    }
 }

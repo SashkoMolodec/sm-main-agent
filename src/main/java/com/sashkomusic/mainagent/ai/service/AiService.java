@@ -1,7 +1,6 @@
 package com.sashkomusic.mainagent.ai.service;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
-import com.sashkomusic.mainagent.domain.model.MusicSearchQuery;
 import com.sashkomusic.mainagent.domain.model.UserIntent;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
@@ -59,14 +58,23 @@ public interface AiService {
                - "варіант 3"
                - "option 2"
 
-            6. GENERAL_CHAT - Greetings, questions about bot, casual conversation
+            6. DIRECT_DOWNLOAD_REQUEST - User explicitly requests to download music with "скачай" or "завантаж" prefix
+               Examples:
+               - "скачай кому вниз - in kastus"
+               - "завантаж Aphex Twin ambient tracks"
+               - "скачай Паліндром Машина для трансляції снів"
+               - "download Daft Punk"
+               - Any query starting with download command words ("скачай", "завантаж", "download")
+               IMPORTANT: This is HIGHEST PRIORITY - if query starts with download words, it's ALWAYS DIRECT_DOWNLOAD_REQUEST
+
+            7. GENERAL_CHAT - Greetings, questions about bot, casual conversation
                Examples:
                - "hi"
                - "how are you"
                - "що ти вмієш?"
                - "дякую"
 
-            7. UNKNOWN - Cannot determine intent
+            8. UNKNOWN - Cannot determine intent
 
             Default behavior:
             - If user writes artist name, album name, or music-related keywords -> SEARCH_FOR_RELEASE_DEFAULT
@@ -199,10 +207,11 @@ public interface AiService {
         2. If field not mentioned, use empty string (or null for dateRange)
         3. IGNORE words like "find", "search", "latest", "best"
         4. Remove "discogs" keyword if present
-        5. For dateRange: parse into {from, to} object
-        6. For style: you CAN translate genre names (e.g., "дарк ембієнт" -> "dark ambient")
-        7. If no type specified, leave empty (don't assume Album)
-        8. **QUOTED STRINGS: Text in quotes "..." is a SINGLE LITERAL ENTITY**
+        5. IGNORE and remove download command words ("скачай", "завантаж", "download", "dl") if present at start
+        6. For dateRange: parse into {from, to} object
+        7. For style: you CAN translate genre names (e.g., "дарк ембієнт" -> "dark ambient")
+        8. If no type specified, leave empty (don't assume Album)
+        9. **QUOTED STRINGS: Text in quotes "..." is a SINGLE LITERAL ENTITY**
            - DO NOT parse/split quoted text into separate fields
            - If contains label indicators (Records, Tapes, Recordings, Music, Label) → label field
            - Otherwise → treat as artist or release depending on context
@@ -242,10 +251,7 @@ public interface AiService {
           "style": "techno | ambient | etc (empty if not found)",
           "label": "label name (empty if not found)",
           "catno": "catalog number (empty if not found)",
-          "language": "UA or EN",
-          "youtubeUrl": "",
-          "discogsUrl": "",
-          "bandcampUrl": ""
+          "language": "UA or EN"
         }
 
         EXAMPLES:
@@ -263,10 +269,7 @@ public interface AiService {
           "style": "",
           "label": "",
           "catno": "",
-          "language": "EN",
-          "youtubeUrl": "",
-          "discogsUrl": "",
-          "bandcampUrl": ""
+          "language": "EN"
         }
 
         User: "Онука 2014"
@@ -283,10 +286,7 @@ public interface AiService {
           "style": "",
           "label": "",
           "catno": "",
-          "language": "UA",
-          "youtubeUrl": "",
-          "discogsUrl": "",
-          "bandcampUrl": ""
+          "language": "UA"
         }
 
         User: "Паліндром альбом Хвороба discogs"
@@ -303,10 +303,7 @@ public interface AiService {
           "style": "",
           "label": "",
           "catno": "",
-          "language": "UA",
-          "youtubeUrl": "",
-          "discogsUrl": "",
-          "bandcampUrl": ""
+          "language": "UA"
         }
 
         User: "Jeff Mills 1996 vinyl"
@@ -323,10 +320,7 @@ public interface AiService {
           "style": "",
           "label": "",
           "catno": "",
-          "language": "EN",
-          "youtubeUrl": "",
-          "discogsUrl": "",
-          "bandcampUrl": ""
+          "language": "EN"
         }
 
         User: "German techno 90s"

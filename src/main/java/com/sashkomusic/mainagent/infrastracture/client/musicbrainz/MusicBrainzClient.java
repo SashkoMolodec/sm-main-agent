@@ -286,12 +286,16 @@ public class MusicBrainzClient implements SearchEngineService {
 
         String coverUrl = getCoverUrl(representative);
 
+        // Clean special characters that break file search
+        String cleanArtist = clean(getArtistName(representative));
+        String cleanTitle = clean(representative.title());
+
         return new ReleaseMetadata(
                 representative.id(),
                 representative.releaseGroup().id(),
                 Source.MUSICBRAINZ,
-                getArtistName(representative),
-                representative.title(),
+                cleanArtist,
+                cleanTitle,
                 representative.score(),
                 years,
                 types,
@@ -368,5 +372,13 @@ public class MusicBrainzClient implements SearchEngineService {
     @Override
     public String getName() {
         return "musicbrainz";
+    }
+
+    private String clean(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        // Remove special characters that break file search
+        return text.replaceAll("[*?\\[\\]{}|<>\"'`]", "").trim();
     }
 }

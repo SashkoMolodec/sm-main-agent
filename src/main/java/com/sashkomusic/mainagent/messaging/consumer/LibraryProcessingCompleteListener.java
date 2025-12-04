@@ -28,7 +28,7 @@ public class LibraryProcessingCompleteListener {
     private String buildResultMessage(LibraryProcessingCompleteDto result) {
         if (result.success()) {
             return String.format("""
-                    ✅ **успішно!**
+                    ✅ **додано в лібку!**
                     
                     📁 `%s`
                     %s

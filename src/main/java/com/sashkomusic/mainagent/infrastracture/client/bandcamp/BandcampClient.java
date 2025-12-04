@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -22,7 +23,7 @@ public class BandcampClient implements SearchEngineService {
     private final RestClient client;
     private final SearchContextService contextHolder;
 
-    public BandcampClient(RestClient.Builder builder, SearchContextService contextHolder) {
+    public BandcampClient(RestClient.Builder builder, @Lazy SearchContextService contextHolder) {
         this.contextHolder = contextHolder;
         this.client = builder
                 .baseUrl("https://bandcamp.com")
@@ -298,6 +299,10 @@ public class BandcampClient implements SearchEngineService {
         String url = representative.url();
         String imageUrl = representative.imageUrl();
 
+        // Clean special characters that break file search
+        artist = clean(artist);
+        title = clean(title);
+
         // Collect types from all results in group
         List<String> types = groupResults.stream()
                 .map(BandcampSearchResponse.Result::type)
@@ -404,5 +409,13 @@ public class BandcampClient implements SearchEngineService {
     @Override
     public String getName() {
         return "bandcamp";
+    }
+
+    private String clean(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        // Remove special characters that break file search
+        return text.replaceAll("[*?\\[\\]{}|<>\"'`]", "").trim();
     }
 }
