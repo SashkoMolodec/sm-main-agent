@@ -2,9 +2,11 @@ package com.sashkomusic.mainagent.domain.service.process;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.model.DateRange;
 import com.sashkomusic.mainagent.domain.model.Language;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.infrastracture.client.bandcamp.BandcampClient;
 import com.sashkomusic.mainagent.infrastracture.client.discogs.DiscogsClient;
@@ -49,73 +51,189 @@ public class ProcessFolderFlowService {
             "mp3", "flac", "m4a", "ogg", "wav", "opus", "aac"
     );
 
-    public List<BotResponse> process(long chatId, String folderName) {
+    public List<BotResponse> process(long chatId, String input) {
         try {
-            Path folderPath = Paths.get(downloadsBasePath, folderName);
-            if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
-                return List.of(BotResponse.text("❌ папка не знайдена: `" + folderName + "`"));
-            }
+            FolderParseResult parseResult = parseFolderAndFilters(input);
 
-            List<String> audioFiles = getAudioFiles(folderPath);
+            List<BotResponse> validationError = validateFolder(parseResult.folderPath(), parseResult.folderName());
+            if (validationError != null) return validationError;
+
+            List<String> audioFiles = getAudioFiles(parseResult.folderPath());
             if (audioFiles.isEmpty()) {
                 return List.of(BotResponse.text("❌ В папці немає аудіо-файлів"));
             }
 
-            log.info("Processing folder: {}, found {} audio files", folderName, audioFiles.size());
+            log.info("Processing folder: {}, filters: {}, found {} audio files",
+                    parseResult.folderName(), parseResult.filtersText(), audioFiles.size());
 
-            var releaseInfo = identifierService.identifyFromAudioFile(audioFiles.get(0));
-            if (releaseInfo != null) {
-                log.info("Using release info from audio file tags");
-            } else {
-                log.info("No tags in audio file, trying folder name parsing");
-                releaseInfo = identifierService.identifyFromFolderName(folderName);
+            MetadataSearchRequest searchRequest = buildSearchRequest(
+                    parseResult.folderName(), parseResult.filtersText(), audioFiles);
+
+            List<BotResponse> requestError = validateSearchRequest(searchRequest, parseResult.folderName());
+            if (requestError != null) return requestError;
+
+            SearchResults searchResults = searchAllSources(searchRequest);
+
+            if (searchResults.isEmpty()) {
+                return List.of(
+                    BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
+                    BotResponse.text("❌ нема шось метаданих")
+                );
             }
 
-            if (releaseInfo == null) {
-                return List.of(BotResponse.text(String.format("""
-                        ❌ не вдалося розпізнати назву релізу з папки: `%s`
+            saveSearchContext(chatId, parseResult.folderName(), searchRequest,
+                    searchResults, parseResult.folderPath(), audioFiles);
 
-                        спробуй тако:
-                        • Artist - Album (Year)
-                        • Artist - Album
-                        • [Label] Artist - Album
-                        """, folderName)));
-            }
-
-            List<BotResponse> responses = new ArrayList<>();
-            responses.add(BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())));
-
-            MetadataSearchRequest searchRequest = MetadataSearchRequest.create(
-                    releaseInfo.artist(), releaseInfo.album(), null, null, null, null, null, null, null, null, null, Language.EN);
-
-            List<ReleaseMetadata> mbResults = searchSource(MUSICBRAINZ.name(), () ->
-                    musicBrainzClient.searchReleases(searchRequest), 3);
-
-            List<ReleaseMetadata> discogsResults = searchSource(DISCOGS.name(), () ->
-                    discogsClient.searchReleases(searchRequest), 4);
-
-            List<ReleaseMetadata> bandcampResults = searchSource(BANDCAMP.name(), () ->
-                    bandcampClient.searchReleases(searchRequest), 3);
-
-            List<ReleaseMetadata> allResults = new ArrayList<>();
-            allResults.addAll(mbResults);
-            allResults.addAll(discogsResults);
-            allResults.addAll(bandcampResults);
-
-            if (allResults.isEmpty()) {
-                responses.add(BotResponse.text("❌ нема шось метаданих"));
-                return responses;
-            }
-
-            storeSearchResults(chatId, allResults);
-            storeChatContext(chatId, folderPath, audioFiles);
-
-            responses.add(buildOptionsMessage(mbResults, discogsResults, bandcampResults));
-            return responses;
+            return List.of(
+                BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
+                buildOptionsMessage(searchResults.mbResults(), searchResults.discogsResults(),
+                        searchResults.bandcampResults())
+            );
 
         } catch (Exception e) {
             log.error("Error processing folder: {}", e.getMessage(), e);
             return List.of(BotResponse.text("❌ помилка обробки папки: " + e.getMessage()));
+        }
+    }
+
+    private FolderParseResult parseFolderAndFilters(String input) {
+        String folderName = input.trim();
+        String filtersText = null;
+        Path folderPath = Paths.get(downloadsBasePath, folderName);
+
+        if (!Files.exists(folderPath) && folderName.contains(" ")) {
+            String[] words = folderName.split("\\s+");
+            for (int i = words.length - 1; i > 0; i--) {
+                String candidateFolder = String.join(" ", java.util.Arrays.copyOfRange(words, 0, i));
+                Path candidatePath = Paths.get(downloadsBasePath, candidateFolder);
+                if (Files.exists(candidatePath) && Files.isDirectory(candidatePath)) {
+                    folderName = candidateFolder;
+                    filtersText = String.join(" ", java.util.Arrays.copyOfRange(words, i, words.length));
+                    folderPath = candidatePath;
+                    break;
+                }
+            }
+        }
+
+        return new FolderParseResult(folderName, filtersText, folderPath);
+    }
+
+    private List<BotResponse> validateFolder(Path folderPath, String folderName) {
+        if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
+            return List.of(BotResponse.text("❌ папка не знайдена: `" + folderName + "`"));
+        }
+        return null;
+    }
+
+    private MetadataSearchRequest buildSearchRequest(String folderName, String filtersText,
+                                                      List<String> audioFiles) {
+        MetadataSearchRequest baseRequest = getBaseSearchRequest(folderName, audioFiles);
+        return mergeFilters(baseRequest, filtersText);
+    }
+
+    private MetadataSearchRequest getBaseSearchRequest(String folderName, List<String> audioFiles) {
+        var releaseInfoFromTags = identifierService.identifyFromAudioFile(audioFiles.getFirst());
+
+        if (releaseInfoFromTags != null) {
+            log.info("Using release info from audio file tags");
+            DateRange dateRange = parseDateRange(releaseInfoFromTags.year());
+            return MetadataSearchRequest.create(
+                    releaseInfoFromTags.artist(), releaseInfoFromTags.album(),
+                    null, dateRange, null, null, null, null, null, null, null, Language.EN);
+        }
+
+        log.info("No tags in audio file, parsing folder name");
+        return identifierService.identifyFromFolderName(folderName);
+    }
+
+    private DateRange parseDateRange(String year) {
+        if (year != null && !year.isEmpty()) {
+            try {
+                int yearInt = Integer.parseInt(year);
+                return new DateRange(yearInt, yearInt);
+            } catch (NumberFormatException e) {
+                log.warn("Could not parse year from tags: {}", year);
+            }
+        }
+        return null;
+    }
+
+    private MetadataSearchRequest mergeFilters(MetadataSearchRequest baseRequest, String filtersText) {
+        if (filtersText == null || filtersText.isEmpty() || baseRequest == null) {
+            return baseRequest;
+        }
+
+        log.info("Parsing additional filters: {}", filtersText);
+        MetadataSearchRequest additionalFilters = aiService.parseAdditionalFilters(filtersText);
+
+        return MetadataSearchRequest.create(
+                baseRequest.artist(),
+                baseRequest.release(),
+                baseRequest.recording(),
+                additionalFilters.dateRange() != null && !additionalFilters.dateRange().isEmpty()
+                        ? additionalFilters.dateRange() : baseRequest.dateRange(),
+                !additionalFilters.format().isEmpty() ? additionalFilters.format() : baseRequest.format(),
+                !additionalFilters.type().isEmpty() ? additionalFilters.type() : baseRequest.type(),
+                !additionalFilters.country().isEmpty() ? additionalFilters.country() : baseRequest.country(),
+                !additionalFilters.status().isEmpty() ? additionalFilters.status() : baseRequest.status(),
+                !additionalFilters.style().isEmpty() ? additionalFilters.style() : baseRequest.style(),
+                !additionalFilters.label().isEmpty() ? additionalFilters.label() : baseRequest.label(),
+                !additionalFilters.catno().isEmpty() ? additionalFilters.catno() : baseRequest.catno(),
+                Language.EN
+        );
+    }
+
+    private List<BotResponse> validateSearchRequest(MetadataSearchRequest searchRequest, String folderName) {
+        if (searchRequest == null || searchRequest.artist().isEmpty() || searchRequest.release().isEmpty()) {
+            return List.of(BotResponse.text(String.format("""
+                    ❌ не вдалося розпізнати назву релізу з папки: `%s`
+
+                    допиши контексту:
+                    • /process Artist - Album
+                    • /process Artist - Album касета 1990 україна
+                    """, folderName)));
+        }
+        return null;
+    }
+
+    private SearchResults searchAllSources(MetadataSearchRequest searchRequest) {
+        List<ReleaseMetadata> mbResults = searchSource(MUSICBRAINZ.name(),
+                () -> musicBrainzClient.searchReleases(searchRequest), 4);
+        List<ReleaseMetadata> discogsResults = searchSource(DISCOGS.name(),
+                () -> discogsClient.searchReleases(searchRequest), 4);
+        List<ReleaseMetadata> bandcampResults = searchSource(BANDCAMP.name(),
+                () -> bandcampClient.searchReleases(searchRequest), 3);
+
+        return new SearchResults(mbResults, discogsResults, bandcampResults);
+    }
+
+    private void saveSearchContext(long chatId, String folderName, MetadataSearchRequest searchRequest,
+                                   SearchResults searchResults, Path folderPath, List<String> audioFiles) {
+        List<ReleaseMetadata> allResults = searchResults.allResults();
+
+        SearchEngine primaryEngine = !searchResults.mbResults().isEmpty() ? MUSICBRAINZ :
+                (!searchResults.discogsResults().isEmpty() ? DISCOGS : BANDCAMP);
+
+        searchContextService.saveSearchContext(chatId, primaryEngine, folderName, searchRequest, allResults);
+        storeSearchResults(chatId, allResults);
+        storeChatContext(chatId, folderPath, audioFiles);
+    }
+
+    private record FolderParseResult(String folderName, String filtersText, Path folderPath) {}
+
+    private record SearchResults(List<ReleaseMetadata> mbResults,
+                                 List<ReleaseMetadata> discogsResults,
+                                 List<ReleaseMetadata> bandcampResults) {
+        List<ReleaseMetadata> allResults() {
+            List<ReleaseMetadata> all = new ArrayList<>();
+            all.addAll(mbResults);
+            all.addAll(discogsResults);
+            all.addAll(bandcampResults);
+            return all;
+        }
+
+        boolean isEmpty() {
+            return allResults().isEmpty();
         }
     }
 

@@ -144,34 +144,125 @@ public interface AiService {
     Integer parseOptionNumber(String userInput);
 
     @SystemMessage("""
-            Parse music folder name to extract artist, album, and year.
+            Parse music folder name to extract artist, album, and ALL additional metadata filters.
 
-            Common patterns:
-            - "Artist - Album (Year)" -> artist: Artist, album: Album, year: Year
-            - "Artist - Year - Album" -> artist: Artist, album: Album, year: Year
-            - "[Label] Artist - Album" -> artist: Artist, album: Album, year: null
-            - "Artist - Album [Label]" -> artist: Artist, album: Album, year: null
-            - "Year Artist - Album" -> artist: Artist, album: Album, year: Year
+            This handles folder names like:
+            - "Artist - Album"
+            - "Artist - Album (Year)"
+            - "Artist - Album (kaseta, 1990)"
+            - "Artist - Album (vinyl, 1985-1990, україна)"
+            - "[Label] Artist - Album (cd, 2000)"
 
-            Rules:
-            1. Extract the artist name exactly as written
-            2. Extract the album name exactly as written (remove year if it's part of album name)
-            3. Extract 4-digit year if present
-            4. Ignore label names in brackets []
-            5. Return null values for fields that cannot be determined
-            6. **IMPORTANT: Both artist and album must be present. If cannot extract both, return null values**
+            EXTRACTION RULES:
+            1. Extract artist and album from main folder name (before parentheses)
+            2. Extract ALL filters from text in parentheses (format, year, country, type, label, etc.)
+            3. Common folder patterns:
+               - "Artist - Album (filters)"
+               - "Artist - Year - Album (filters)"
+               - "[Label] Artist - Album (filters)"
+               - "Year Artist - Album (filters)"
 
-            Examples:
-            "Jeff Mills - 2000 - Lifelike" -> {artist: "Jeff Mills", album: "Lifelike", year: "2000"}
-            "Aphex Twin - Selected Ambient Works 85-92 (1992)" -> {artist: "Aphex Twin", album: "Selected Ambient Works 85-92", year: "1992"}
-            "Burial - Untrue" -> {artist: "Burial", album: "Untrue", year: null}
-            "[Axis Records] Jeff Mills - The Bells" -> {artist: "Jeff Mills", album: "The Bells", year: null}
-            "2015 Oneohtrix Point Never - Garden of Delete" -> {artist: "Oneohtrix Point Never", album: "Garden of Delete", year: "2015"}
+            AVAILABLE FILTER FIELDS (from parentheses):
+            - dateRange: Year or year range
+              - Single year: "1990" -> {from: 1990, to: 1990}
+              - Range: "1985-1990" -> {from: 1985, to: 1990}
+              - "90s" -> {from: 1990, to: 1999}
+            - format: Vinyl | CD | Cassette | Digital Media | File
+              - Recognize: vinyl, вініл, платівка, грамплатівка
+              - Recognize: cd, диск, компакт-диск
+              - Recognize: cassette, kaseta, касета, tape, плівка
+            - type: Album | EP | Single | Compilation
+            - country: ISO 2-letter country code (UA, US, GB, DE, FR, JP, etc)
+              - ukraine, україна -> UA
+              - usa, америка -> US
+              - uk, britain, англія -> GB
+            - status: Official | Bootleg | Promotion
+            - style: Genre/style (techno, ambient, rock, etc)
+            - label: Record label name (if in parentheses)
+            - catno: Catalog number
 
-            Return JSON object with fields: artist, album, year (all strings or null)
+            CRITICAL RULES:
+            1. **Artist and album are REQUIRED** - extract from folder name before parentheses
+            2. Keep exact spelling for artist/album - do NOT translate or transliterate
+            3. Filters in parentheses are OPTIONAL - extract what's present
+            4. If year appears BOTH in folder name AND parentheses, use the one from parentheses
+            5. Ignore label in square brackets [Label]
+            6. Multiple filters in parentheses are comma-separated
+            7. Return empty strings for missing fields (null for dateRange)
+
+            OUTPUT STRUCTURE (MetadataSearchRequest format):
+            {
+              "id": null,
+              "artist": "extracted artist name",
+              "release": "extracted album/release name",
+              "recording": "",
+              "dateRange": {from: year, to: year} or null,
+              "format": "Vinyl | CD | etc (empty if not found)",
+              "type": "Album | EP | etc (empty if not found)",
+              "country": "US | GB | etc (empty if not found)",
+              "status": "Official | etc (empty if not found)",
+              "style": "techno | ambient | etc (empty if not found)",
+              "label": "label name (empty if not found)",
+              "catno": "catalog number (empty if not found)"
+            }
+
+            EXAMPLES:
+            Input: "Aphex Twin - Selected Ambient Works 85-92 (1992)"
+            Output: {
+              "artist": "Aphex Twin",
+              "release": "Selected Ambient Works 85-92",
+              "recording": "",
+              "dateRange": {"from": 1992, "to": 1992},
+              "format": "", "type": "", "country": "", "status": "", "style": "", "label": "", "catno": ""
+            }
+
+            Input: "Кому Вниз - Мекка (касета, 1990, україна)"
+            Output: {
+              "artist": "Кому Вниз",
+              "release": "Мекка",
+              "recording": "",
+              "dateRange": {"from": 1990, "to": 1990},
+              "format": "Cassette",
+              "type": "",
+              "country": "UA",
+              "status": "", "style": "", "label": "", "catno": ""
+            }
+
+            Input: "Kraftwerk - Autobahn (vinyl, 1974, germany)"
+            Output: {
+              "artist": "Kraftwerk",
+              "release": "Autobahn",
+              "recording": "",
+              "dateRange": {"from": 1974, "to": 1974},
+              "format": "Vinyl",
+              "type": "",
+              "country": "DE",
+              "status": "", "style": "", "label": "", "catno": ""
+            }
+
+            Input: "[Warp Records] Aphex Twin - Drukqs (cd, 2001)"
+            Output: {
+              "artist": "Aphex Twin",
+              "release": "Drukqs",
+              "recording": "",
+              "dateRange": {"from": 2001, "to": 2001},
+              "format": "CD",
+              "type": "",
+              "country": "",
+              "status": "", "style": "", "label": "", "catno": ""
+            }
+
+            Input: "Burial - Untrue"
+            Output: {
+              "artist": "Burial",
+              "release": "Untrue",
+              "recording": "",
+              "dateRange": null,
+              "format": "", "type": "", "country": "", "status": "", "style": "", "label": "", "catno": ""
+            }
             """)
     @UserMessage("{{it}}")
-    String parseFolderName(String folderName);
+    MetadataSearchRequest parseFolderName(String folderName);
 
     @SystemMessage("""
         You are a Universal Metadata Search Query Extractor.
@@ -385,4 +476,105 @@ public interface AiService {
         """)
     @UserMessage("{{it}}")
     MetadataSearchRequest buildSearchRequest(String userPrompt);
+
+    @SystemMessage("""
+        Parse additional search filters from text (typically from parentheses in folder name).
+        Extract ONLY filter parameters - do NOT try to extract artist/release/recording.
+
+        AVAILABLE FILTER FIELDS:
+        - dateRange: Year or year range
+          - Single year: "2013" -> {from: 2013, to: 2013}
+          - Range: "90s" -> {from: 1990, to: 1999}
+          - "1980-1990" -> {from: 1980, to: 1990}
+        - format: Vinyl | CD | Cassette | Digital Media | File
+          - Recognize: vinyl, вініл, платівка, грамплатівка
+          - Recognize: cd, диск, компакт-диск
+          - Recognize: cassette, kaseta, касета, tape, плівка
+          - Recognize: digital, цифра, файл
+        - type: Album | EP | Single | Compilation
+        - country: ISO 2-letter country code (US, GB, DE, FR, JP, UA, etc)
+          - Recognize: ukraine, україна, ukrainian -> UA
+          - Recognize: usa, америка, american -> US
+          - Recognize: uk, britain, англія, british -> GB
+          - Recognize: germany, німеччина, german -> DE
+        - status: Official | Bootleg | Promotion
+        - style: Genre/style/tag (techno, ambient, rock, idm, etc)
+        - label: Record label name
+        - catno: Catalog number (e.g. "AX-009")
+
+        RULES:
+        1. Extract ONLY filter parameters listed above
+        2. Leave artist, release, recording as EMPTY strings
+        3. Multiple filters can be comma-separated: "kaseta, 1990, україна"
+        4. Be flexible with format names (vinyl = вініл = платівка)
+        5. Detect language from input (UA or EN)
+        6. If field not found, use empty string (or null for dateRange)
+
+        EXAMPLES:
+        Input: "kaseta, 1990"
+        Output: {
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": {"from": 1990, "to": 1990},
+          "format": "Cassette",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "",
+          "catno": "",
+          "language": "EN"
+        }
+
+        Input: "вініл, 1985-1990, україна"
+        Output: {
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": {"from": 1985, "to": 1990},
+          "format": "Vinyl",
+          "type": "",
+          "country": "UA",
+          "status": "",
+          "style": "",
+          "label": "",
+          "catno": "",
+          "language": "UA"
+        }
+
+        Input: "cd, 2000, warp records"
+        Output: {
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": {"from": 2000, "to": 2000},
+          "format": "CD",
+          "type": "",
+          "country": "",
+          "status": "",
+          "style": "",
+          "label": "warp records",
+          "catno": "",
+          "language": "EN"
+        }
+
+        Input: "ep, techno, 1995"
+        Output: {
+          "artist": "",
+          "release": "",
+          "recording": "",
+          "dateRange": {"from": 1995, "to": 1995},
+          "format": "",
+          "type": "EP",
+          "country": "",
+          "status": "",
+          "style": "techno",
+          "label": "",
+          "catno": "",
+          "language": "EN"
+        }
+        """)
+    @UserMessage("{{it}}")
+    MetadataSearchRequest parseAdditionalFilters(String filtersText);
 }

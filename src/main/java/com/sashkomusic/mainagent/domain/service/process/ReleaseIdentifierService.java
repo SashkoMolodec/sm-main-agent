@@ -1,15 +1,15 @@
 package com.sashkomusic.mainagent.domain.service.process;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sashkomusic.mainagent.ai.service.AiService;
+import com.sashkomusic.mainagent.domain.model.DateRange;
+import com.sashkomusic.mainagent.domain.model.Language;
+import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jaudiotagger.audio.AudioFile;
 import org.jaudiotagger.audio.AudioFileIO;
 import org.jaudiotagger.tag.FieldKey;
 import org.jaudiotagger.tag.Tag;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -22,7 +22,6 @@ import java.util.regex.Pattern;
 public class ReleaseIdentifierService {
 
     private final AiService aiService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Pattern[] FOLDER_PATTERNS = {
             // Artist - Album (Year)
@@ -40,66 +39,42 @@ public class ReleaseIdentifierService {
     public record ReleaseInfo(String artist, String album, String year) {
     }
 
-    public ReleaseInfo identifyFromFolderName(String folderName) {
+    public MetadataSearchRequest identifyFromFolderName(String folderName) {
         if (folderName == null || folderName.isEmpty()) {
             log.warn("Empty folder name provided");
             return null;
         }
 
         log.debug("Attempting to parse folder name: {}", folderName);
-
-        // AI first
-        ReleaseInfo aiResult = parseWithAi(folderName);
-        if (aiResult != null) {
-            log.info("AI parsed folder name: artist='{}', album='{}', year='{}'",
-                    aiResult.artist(), aiResult.album(), aiResult.year());
+        MetadataSearchRequest aiResult = parseWithAi(folderName);
+        if (aiResult != null && !aiResult.artist().isEmpty() && !aiResult.release().isEmpty()) {
+            log.info("AI parsed folder name: artist='{}', release='{}', filters present: format={}, year={}, country={}",
+                    aiResult.artist(), aiResult.release(),
+                    !aiResult.format().isEmpty(), aiResult.dateRange() != null, !aiResult.country().isEmpty());
             return aiResult;
         }
 
-        // Fallback to regex
         log.debug("AI parsing failed, trying regex patterns");
         return parseWithRegex(folderName);
     }
 
-    private ReleaseInfo parseWithAi(String folderName) {
+    private MetadataSearchRequest parseWithAi(String folderName) {
         try {
-            String jsonResponse = aiService.parseFolderName(folderName);
-            String cleanJson = removeMarkdown(jsonResponse);
+            MetadataSearchRequest result = aiService.parseFolderName(folderName);
 
-            JsonNode node = objectMapper.readTree(cleanJson);
-
-            String artist = node.has("artist") && !node.get("artist").isNull()
-                    ? node.get("artist").asText() : null;
-            String album = node.has("album") && !node.get("album").isNull()
-                    ? node.get("album").asText() : null;
-            String year = node.has("year") && !node.get("year").isNull()
-                    ? node.get("year").asText() : null;
-
-            // Both artist and album are required
-            if (artist == null || artist.isEmpty() || album == null || album.isEmpty()) {
-                log.warn("AI returned incomplete data: artist={}, album={}", artist, album);
+            if (result.artist().isEmpty() || result.release().isEmpty()) {
+                log.warn("AI returned incomplete data: artist='{}', release='{}'",
+                        result.artist(), result.release());
                 return null;
             }
-
-            return new ReleaseInfo(artist, album, year);
+            return result;
         } catch (Exception e) {
             log.warn("AI parsing failed: {}", e.getMessage());
             return null;
         }
     }
 
-    @NotNull
-    private static String removeMarkdown(String jsonResponse) {
-        String cleanJson = jsonResponse.trim();
-        if (cleanJson.startsWith("```")) {
-            cleanJson = cleanJson.replaceFirst("^```(?:json)?\\s*", "");
-            cleanJson = cleanJson.replaceFirst("```\\s*$", "");
-            cleanJson = cleanJson.trim();
-        }
-        return cleanJson;
-    }
-
-    private ReleaseInfo parseWithRegex(String folderName) {
+    private MetadataSearchRequest parseWithRegex(String folderName) {
         for (Pattern pattern : FOLDER_PATTERNS) {
             Matcher matcher = pattern.matcher(folderName.trim());
             if (matcher.matches()) {
@@ -114,7 +89,22 @@ public class ReleaseIdentifierService {
                 }
 
                 log.info("Regex parsed folder name: artist='{}', album='{}', year='{}'", artist, album, year);
-                return new ReleaseInfo(artist, album, year);
+
+                // Convert to MetadataSearchRequest
+                DateRange dateRange = null;
+                if (year != null && !year.isEmpty()) {
+                    try {
+                        int yearInt = Integer.parseInt(year);
+                        dateRange = new DateRange(yearInt, yearInt);
+                    } catch (NumberFormatException e) {
+                        log.warn("Could not parse year: {}", year);
+                    }
+                }
+
+                return MetadataSearchRequest.create(
+                        artist, album, null, dateRange,
+                        null, null, null, null, null, null, null, Language.EN
+                );
             }
         }
 
