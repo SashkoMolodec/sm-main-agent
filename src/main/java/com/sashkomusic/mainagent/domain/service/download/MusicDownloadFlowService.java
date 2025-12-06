@@ -32,11 +32,10 @@ public class MusicDownloadFlowService {
     private final DownloadTaskProducer downloadTaskProducer;
     private final SearchContextService contextService;
     private final DownloadContextHolder downloadContextHolder;
-    private final DownloadAnalyzerFactory analyzerFactory;
     private final DownloadOptionsFormatter formatter;
     private final ReleaseSearchFlowService releaseSearchFlowService;
-    private final DownloadSourceHandlerFactory handlerFactory;
     private final Map<SearchEngine, SearchEngineService> searchEngines;
+    private final Map<DownloadEngine, DownloadSourceService> downloadSources;
 
     public List<BotResponse> handleCallback(long chatId, String data) {
         if (data.startsWith("DL:")) {
@@ -74,7 +73,7 @@ public class MusicDownloadFlowService {
     }
 
     private List<BotResponse> initiateDownloadSearch(long chatId, ReleaseMetadata metadata) {
-        return initiateDownloadSearch(chatId, metadata, null);
+        return initiateDownloadSearch(chatId, metadata, DownloadEngine.QOBUZ);
     }
 
     private List<BotResponse> initiateDownloadSearch(long chatId, ReleaseMetadata metadata, DownloadEngine source) {
@@ -93,35 +92,33 @@ public class MusicDownloadFlowService {
     public BotResponse handleSearchResults(SearchFilesResultDto dto) {
         log.info("Processing search results for chatId={}, releaseId={}", dto.chatId(), dto.releaseId());
 
-        var analyzer = analyzerFactory.getAnalyzer(dto.results());
-        var analysisResult = analyzer.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
+        if (dto.results().isEmpty()) {
+            return BotResponse.text(formatter.format(List.of(), ""));
+        }
+
+        var currentSource = dto.results().getFirst().source();
+        var sourceService = downloadSources.get(currentSource);
+
+        var analysisResult = sourceService.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
         downloadContextHolder.saveDownloadOptions(dto.chatId(), dto.releaseId(), reports);
 
         reports.forEach(r -> log.info("{}", r));
 
-        if (!dto.results().isEmpty()) {
-            var currentSource = dto.results().getFirst().source();
-            var handler = handlerFactory.getHandler(currentSource);
+        if (sourceService.shouldAutoDownload(reports)) {
+            var chosenReport = reports.getFirst();
+            var option = chosenReport.option();
 
-            if (handler.shouldAutoDownload(reports)) {
-                var chosenReport = reports.getFirst();
-                var option = chosenReport.option();
+            log.info("Auto-downloading from {}: {}", currentSource, option.displayName());
 
-                log.info("Auto-downloading from {}: {}", currentSource, option.displayName());
+            downloadTaskProducer.send(DownloadFilesTaskDto.of(dto.chatId(), dto.releaseId(), option));
 
-                downloadTaskProducer.send(DownloadFilesTaskDto.of(dto.chatId(), dto.releaseId(), option));
-
-                String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
-                return BotResponse.text(message);
-            }
-
-            String text = formatter.format(reports, analysisResult.aiSummary());
-            return handler.buildSearchResultsResponse(text, dto.releaseId(), currentSource);
+            String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
+            return BotResponse.text(message);
         }
 
         String text = formatter.format(reports, analysisResult.aiSummary());
-        return BotResponse.text(text);
+        return sourceService.buildSearchResultsResponse(text, dto.releaseId(), currentSource);
     }
 
     public List<BotResponse> handleDownloadOption(long chatId, String rawInput) {
@@ -143,8 +140,8 @@ public class MusicDownloadFlowService {
 
         downloadTaskProducer.send(DownloadFilesTaskDto.of(chatId, releaseId, option));
 
-        var handler = handlerFactory.getHandler(option.source());
-        String message = handler.formatDownloadConfirmation(option);
+        var sourceService = downloadSources.get(option.source());
+        String message = sourceService.formatDownloadConfirmation(option);
         return List.of(BotResponse.text(message));
     }
 

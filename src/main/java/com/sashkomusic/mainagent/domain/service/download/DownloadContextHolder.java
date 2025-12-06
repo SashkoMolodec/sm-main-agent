@@ -13,12 +13,12 @@ public class DownloadContextHolder {
 
     private final Map<Long, DownloadContext> downloadSessions = new ConcurrentHashMap<>();
 
-    public void saveDownloadOptions(long chatId, String releaseId, List<DownloadOptionsAnalyzer.OptionReport> optionReports) {
+    public void saveDownloadOptions(long chatId, String releaseId, List<DownloadSourceService.OptionReport> optionReports) {
         log.debug("Saving download options for chatId: {}, releaseId: {}", chatId, releaseId);
         downloadSessions.put(chatId, new DownloadContext(releaseId, optionReports));
     }
 
-    public List<DownloadOptionsAnalyzer.OptionReport> getDownloadOptions(long chatId) {
+    public List<DownloadSourceService.OptionReport> getDownloadOptions(long chatId) {
         DownloadContext context = downloadSessions.get(chatId);
         if (context != null) {
             return context.optionReports();
@@ -41,7 +41,7 @@ public class DownloadContextHolder {
 
     private record DownloadContext(
             String chosenReleaseId,
-            List<DownloadOptionsAnalyzer.OptionReport> optionReports
+            List<DownloadSourceService.OptionReport> optionReports
     ) {
     }
 }

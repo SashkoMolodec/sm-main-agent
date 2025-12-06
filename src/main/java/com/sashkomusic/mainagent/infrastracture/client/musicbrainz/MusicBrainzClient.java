@@ -30,7 +30,6 @@ public class MusicBrainzClient implements SearchEngineService {
     }
 
     @Override
-    @Retryable(retryFor = SearchNotCompleteException.class, maxAttempts = 3, backoff = @Backoff(delay = 5000))
     public List<ReleaseMetadata> searchReleases(MetadataSearchRequest request) {
         boolean hasRecording = !request.recording().isEmpty();
         boolean hasRelease = !request.release().isEmpty();

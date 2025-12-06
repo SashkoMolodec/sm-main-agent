@@ -1,14 +1,17 @@
 package com.sashkomusic.mainagent.domain.service.download;
 
+import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @Component
-public class QobuzDownloadOptionsAnalyzer implements DownloadOptionsAnalyzer {
+public class QobuzDownloadService implements DownloadSourceService {
 
     // Quality priority mapping (higher = better)
     private static final Map<String, Integer> QUALITY_PRIORITY = Map.of(
@@ -30,6 +33,23 @@ public class QobuzDownloadOptionsAnalyzer implements DownloadOptionsAnalyzer {
                 .toList();
 
         return new AnalysisResult(reports, "");
+    }
+
+    @Override
+    public boolean shouldAutoDownload(List<OptionReport> reports) {
+        return reports.size() == 1;
+    }
+
+    @Override
+    public BotResponse buildSearchResultsResponse(String formattedText, String releaseId, DownloadEngine currentSource) {
+        var buttons = new LinkedHashMap<String, String>();
+        buttons.put("⛏️", "SEARCH_ALT:" + releaseId + ":SOULSEEK");
+        return BotResponse.withButtons(formattedText, buttons);
+    }
+
+    @Override
+    public String formatDownloadConfirmation(DownloadOption option) {
+        return "✅ **ок, качаю:**\n%s".formatted(option.displayName());
     }
 
     private int getQualityPriority(OptionReport report) {

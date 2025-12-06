@@ -1,6 +1,8 @@
 package com.sashkomusic.mainagent.domain.service.download;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
+import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
@@ -14,7 +16,7 @@ import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
-public class SoulseekDownloadOptionsAnalyzer implements DownloadOptionsAnalyzer {
+public class SoulseekDownloadService implements DownloadSourceService {
 
     private final AiService aiService;
     private final SearchContextService contextService;
@@ -46,6 +48,29 @@ public class SoulseekDownloadOptionsAnalyzer implements DownloadOptionsAnalyzer 
         );
 
         return new AnalysisResult(reports, aiSummary);
+    }
+
+    @Override
+    public boolean shouldAutoDownload(List<OptionReport> reports) {
+        // Never auto-download from Soulseek - user should choose
+        return false;
+    }
+
+    @Override
+    public BotResponse buildSearchResultsResponse(String formattedText, String releaseId, DownloadEngine currentSource) {
+        // No buttons for Soulseek - just show text
+        return BotResponse.text(formattedText);
+    }
+
+    @Override
+    public String formatDownloadConfirmation(DownloadOption option) {
+        // Soulseek: show file count and size
+        return "✅ **ок, качаю:**\n%s\n📦 %d файлів, %d MB"
+                .formatted(
+                        option.displayName(),
+                        option.files().size(),
+                        option.totalSize()
+                );
     }
 
     @NotNull

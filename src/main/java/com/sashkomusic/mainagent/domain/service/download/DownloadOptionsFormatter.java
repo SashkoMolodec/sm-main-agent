@@ -15,7 +15,7 @@ public class DownloadOptionsFormatter {
             "flac", "mp3", "wav", "m4a", "aac", "alac", "aiff", "ogg", "wma", "ape"
     );
 
-    public String format(List<DownloadOptionsAnalyzer.OptionReport> reports, String aiSummary) {
+    public String format(List<DownloadSourceService.OptionReport> reports, String aiSummary) {
         if (reports.isEmpty()) {
             return "😔 **на жаль, нич.**";
         }
