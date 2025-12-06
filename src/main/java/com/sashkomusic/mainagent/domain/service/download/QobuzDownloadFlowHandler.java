@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class QobuzDownloadService implements DownloadSourceService {
+public class QobuzDownloadFlowHandler implements DownloadFlowHandler {
 
     // Quality priority mapping (higher = better)
     private static final Map<String, Integer> QUALITY_PRIORITY = Map.of(

@@ -6,7 +6,7 @@ import com.sashkomusic.mainagent.domain.model.DownloadOption;
 
 import java.util.List;
 
-public interface DownloadSourceService {
+public interface DownloadFlowHandler {
 
     AnalysisResult analyzeAll(List<DownloadOption> options, String releaseId, long chatId);
 

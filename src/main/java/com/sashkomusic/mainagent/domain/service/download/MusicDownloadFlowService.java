@@ -35,7 +35,7 @@ public class MusicDownloadFlowService {
     private final DownloadOptionsFormatter formatter;
     private final ReleaseSearchFlowService releaseSearchFlowService;
     private final Map<SearchEngine, SearchEngineService> searchEngines;
-    private final Map<DownloadEngine, DownloadSourceService> downloadSources;
+    private final Map<DownloadEngine, DownloadFlowHandler> downloadFlowHandlers;
 
     public List<BotResponse> handleCallback(long chatId, String data) {
         if (data.startsWith("DL:")) {
@@ -97,15 +97,15 @@ public class MusicDownloadFlowService {
         }
 
         var currentSource = dto.results().getFirst().source();
-        var sourceService = downloadSources.get(currentSource);
+        var flowHandler = downloadFlowHandlers.get(currentSource);
 
-        var analysisResult = sourceService.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
+        var analysisResult = flowHandler.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
         downloadContextHolder.saveDownloadOptions(dto.chatId(), dto.releaseId(), reports);
 
         reports.forEach(r -> log.info("{}", r));
 
-        if (sourceService.shouldAutoDownload(reports)) {
+        if (flowHandler.shouldAutoDownload(reports)) {
             var chosenReport = reports.getFirst();
             var option = chosenReport.option();
 
@@ -118,7 +118,7 @@ public class MusicDownloadFlowService {
         }
 
         String text = formatter.format(reports, analysisResult.aiSummary());
-        return sourceService.buildSearchResultsResponse(text, dto.releaseId(), currentSource);
+        return flowHandler.buildSearchResultsResponse(text, dto.releaseId(), currentSource);
     }
 
     public List<BotResponse> handleDownloadOption(long chatId, String rawInput) {
@@ -140,8 +140,8 @@ public class MusicDownloadFlowService {
 
         downloadTaskProducer.send(DownloadFilesTaskDto.of(chatId, releaseId, option));
 
-        var sourceService = downloadSources.get(option.source());
-        String message = sourceService.formatDownloadConfirmation(option);
+        var flowHandler = downloadFlowHandlers.get(option.source());
+        String message = flowHandler.formatDownloadConfirmation(option);
         return List.of(BotResponse.text(message));
     }
 

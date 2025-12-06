@@ -1,9 +1,9 @@
 package com.sashkomusic.mainagent.config;
 
 import com.sashkomusic.mainagent.domain.model.DownloadEngine;
-import com.sashkomusic.mainagent.domain.service.download.DownloadSourceService;
-import com.sashkomusic.mainagent.domain.service.download.QobuzDownloadService;
-import com.sashkomusic.mainagent.domain.service.download.SoulseekDownloadService;
+import com.sashkomusic.mainagent.domain.service.download.DownloadFlowHandler;
+import com.sashkomusic.mainagent.domain.service.download.QobuzDownloadFlowHandler;
+import com.sashkomusic.mainagent.domain.service.download.SoulseekDownloadFlowHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,13 +13,13 @@ import java.util.Map;
 public class DownloadSourceConfig {
 
     @Bean
-    public Map<DownloadEngine, DownloadSourceService> downloadSources(
-            QobuzDownloadService qobuzService,
-            SoulseekDownloadService soulseekService
+    public Map<DownloadEngine, DownloadFlowHandler> downloadFlowHandlers(
+            QobuzDownloadFlowHandler qobuzHandler,
+            SoulseekDownloadFlowHandler soulseekHandler
     ) {
         return Map.of(
-                DownloadEngine.QOBUZ, qobuzService,
-                DownloadEngine.SOULSEEK, soulseekService
+                DownloadEngine.QOBUZ, qobuzHandler,
+                DownloadEngine.SOULSEEK, soulseekHandler
         );
     }
 }

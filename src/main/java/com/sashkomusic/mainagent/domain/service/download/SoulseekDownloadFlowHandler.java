@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
-public class SoulseekDownloadService implements DownloadSourceService {
+public class SoulseekDownloadFlowHandler implements DownloadFlowHandler {
 
     private final AiService aiService;
     private final SearchContextService contextService;
