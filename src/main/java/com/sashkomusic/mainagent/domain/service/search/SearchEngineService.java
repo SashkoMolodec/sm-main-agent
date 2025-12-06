@@ -12,4 +12,11 @@ public interface SearchEngineService {
     List<String> getTracks(String releaseId);
 
     String getName();
+
+    /**
+     * Build a URL to view the release on this search engine's website
+     * @param release the release metadata
+     * @return URL string, or null if not applicable
+     */
+    String buildReleaseUrl(ReleaseMetadata release);
 }

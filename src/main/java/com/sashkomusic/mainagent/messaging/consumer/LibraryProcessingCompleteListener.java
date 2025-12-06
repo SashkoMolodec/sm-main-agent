@@ -7,8 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import java.util.Comparator;
-
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -26,24 +24,22 @@ public class LibraryProcessingCompleteListener {
     }
 
     private String buildResultMessage(LibraryProcessingCompleteDto result) {
+        String[] artistAndRelease = extractArtistAndRelease(result.directoryPath());
+        String artist = artistAndRelease[0];
+        String releaseFolder = artistAndRelease[1];
+
         if (result.success()) {
-            return String.format("""
-                    ✅ **додано в лібку!**
-                    
-                    📁 `%s`
-                    %s
-                    """,
-                    extractFolderName(result.directoryPath()),
-                    formatProcessedFiles(result.processedFiles())
-            );
+            String tracks = formatProcessedFiles(result.processedFiles());
+            return "✅ **додано в лібку!**\n\n📁 _%s_ → _%s_\n%s".formatted(artist, releaseFolder, tracks);
         } else {
             return String.format("""
                     ❌ **помилка обробки релізу**
-                    📁 `%s`
+                    📁 _%s_ → _%s_
                     %s
                     %s
                     """,
-                    extractFolderName(result.directoryPath()),
+                    artist,
+                    releaseFolder,
                     result.message(),
                     result.errors().isEmpty() ? "" : "**помилки:**\n" + String.join("\n", result.errors())
             );
@@ -56,21 +52,34 @@ public class LibraryProcessingCompleteListener {
         }
 
         StringBuilder sb = new StringBuilder();
-        files.sort(Comparator.comparing(LibraryProcessingCompleteDto.ProcessedFileDto::trackNumber));
-        files.forEach(f -> sb.append(String.format("_%02d. %s\n_",
-                        f.trackNumber(),
-                        f.trackTitle())));
-        return sb.toString().toLowerCase();
+        files.stream()
+                .sorted(java.util.Comparator.comparing(LibraryProcessingCompleteDto.ProcessedFileDto::trackNumber))
+                .forEach(f -> sb.append("_%02d. %s_\n".formatted(f.trackNumber(), f.trackTitle().toLowerCase())));
+        return sb.toString();
     }
 
-    private String extractFolderName(String path) {
+    private String[] extractArtistAndRelease(String path) {
         if (path == null || path.isEmpty()) {
-            return "";
+            return new String[]{"unknown", ""};
         }
-        int lastSlash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
-        if (lastSlash >= 0) {
-            return path.substring(lastSlash + 1);
+
+        String cleanPath = path.endsWith("/") || path.endsWith("\\")
+                ? path.substring(0, path.length() - 1)
+                : path;
+
+        int lastSlash = Math.max(cleanPath.lastIndexOf('\\'), cleanPath.lastIndexOf('/'));
+        if (lastSlash < 0) {
+            return new String[]{"unknown", cleanPath};
         }
-        return path;
+
+        String releaseFolder = cleanPath.substring(lastSlash + 1);
+
+        String parentPath = cleanPath.substring(0, lastSlash);
+        int secondLastSlash = Math.max(parentPath.lastIndexOf('\\'), parentPath.lastIndexOf('/'));
+        String artistFolder = secondLastSlash >= 0
+                ? parentPath.substring(secondLastSlash + 1)
+                : parentPath;
+
+        return new String[]{artistFolder, releaseFolder};
     }
 }

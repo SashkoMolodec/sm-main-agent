@@ -49,7 +49,12 @@ public class MusicBrainzClient implements SearchEngineService {
         return results;
     }
 
-    private List<ReleaseMetadata> searchByRelease(MetadataSearchRequest request) {
+    @Retryable(
+            retryFor = SearchNotCompleteException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
+    protected List<ReleaseMetadata> searchByRelease(MetadataSearchRequest request) {
         String luceneQuery = toLuceneQuery(request);
         log.info("Searching MusicBrainz release endpoint with query: {}", luceneQuery);
 
@@ -72,12 +77,17 @@ public class MusicBrainzClient implements SearchEngineService {
             return mapToGroupedDomain(response.releases());
 
         } catch (Exception ex) {
-            log.error("Error searching MusicBrainz release endpoint: {}", ex.getMessage());
+            log.warn("MusicBrainz API error (will retry): {}", ex.getMessage());
             throw new SearchNotCompleteException("Search failed due to API error.");
         }
     }
 
-    private List<ReleaseMetadata> searchByRecording(MetadataSearchRequest request) {
+    @Retryable(
+            retryFor = SearchNotCompleteException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000, multiplier = 2)
+    )
+    protected List<ReleaseMetadata> searchByRecording(MetadataSearchRequest request) {
         String luceneQuery = toLuceneQuery(request);
         log.info("Searching MusicBrainz recording endpoint with query: {}", luceneQuery);
 
@@ -111,7 +121,7 @@ public class MusicBrainzClient implements SearchEngineService {
             return mapToGroupedDomain(allReleases);
 
         } catch (Exception ex) {
-            log.error("Error searching MusicBrainz recording endpoint: {}", ex.getMessage());
+            log.warn("MusicBrainz recording API error (will retry): {}", ex.getMessage());
             throw new SearchNotCompleteException("Search failed due to API error.");
         }
     }
@@ -382,6 +392,14 @@ public class MusicBrainzClient implements SearchEngineService {
     @Override
     public String getName() {
         return "musicbrainz";
+    }
+
+    @Override
+    public String buildReleaseUrl(ReleaseMetadata release) {
+        // Use release group ID (masterId) if available, otherwise release ID
+        String id = release.masterId() != null ? release.masterId() : release.id();
+        String type = release.masterId() != null ? "release-group" : "release";
+        return "https://musicbrainz.org/" + type + "/" + id;
     }
 
     private String clean(String text) {

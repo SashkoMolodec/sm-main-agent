@@ -412,6 +412,12 @@ public class BandcampClient implements SearchEngineService {
         return "bandcamp";
     }
 
+    @Override
+    public String buildReleaseUrl(ReleaseMetadata release) {
+        // Bandcamp URL is stored in masterId field
+        return release.masterId();
+    }
+
     private String clean(String text) {
         if (text == null || text.isBlank()) {
             return text;

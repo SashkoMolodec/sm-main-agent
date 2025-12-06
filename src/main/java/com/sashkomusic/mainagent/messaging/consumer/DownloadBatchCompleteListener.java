@@ -1,6 +1,5 @@
 package com.sashkomusic.mainagent.messaging.consumer;
 
-import com.sashkomusic.mainagent.api.telegram.TelegramChatBot;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.messaging.consumer.dto.DownloadBatchCompleteDto;
@@ -16,7 +15,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class DownloadBatchCompleteListener {
 
-    private final TelegramChatBot chatBot;
     private final ProcessLibraryTaskProducer libraryTaskProducer;
     private final SearchContextService contextHolder;
 
@@ -25,14 +23,11 @@ public class DownloadBatchCompleteListener {
         log.info("Received download batch complete for chatId={}, releaseId={}, files={}",
                 batchComplete.chatId(), batchComplete.releaseId(), batchComplete.totalFiles());
 
-        String message = buildCompletionMessage(batchComplete);
-        chatBot.sendMessage(batchComplete.chatId(), message);
-
         sendToLibraryProcess(batchComplete);
     }
 
     private void sendToLibraryProcess(DownloadBatchCompleteDto batchComplete) {
-        ReleaseMetadata metadata = contextHolder.getReleaseMetadata(batchComplete.releaseId());
+        ReleaseMetadata metadata = contextHolder.getMetadataWithTracks(batchComplete.releaseId(), batchComplete.chatId());
         if (metadata != null) {
             String masterId = metadata.masterId();
 
@@ -49,38 +44,5 @@ public class DownloadBatchCompleteListener {
         } else {
             log.warn("No metadata found for releaseId={}, skipping library processing", batchComplete.releaseId());
         }
-    }
-
-    private String buildCompletionMessage(DownloadBatchCompleteDto batch) {
-        String[] pathParts = extractPathParts(batch.directoryPath());
-        String artist = pathParts[0];
-        String release = pathParts[1];
-
-        StringBuilder message = new StringBuilder();
-        message.append("✅ **додано в лібку!**\n");
-        message.append("`%s` → `%s`\n\n".formatted(artist, release));
-
-        for (String track : batch.allFiles()) {
-            message.append("`%s`\n".formatted(track));
-        }
-        return message.toString();
-    }
-
-    private String[] extractPathParts(String path) {
-        if (path == null || path.isEmpty()) {
-            return new String[]{"Unknown", "Unknown"};
-        }
-
-        String[] parts = path.split("[/\\\\]");
-
-        if (parts.length >= 2) {
-            String release = parts[parts.length - 1];
-            String artist = parts[parts.length - 2];
-            return new String[]{artist, release};
-        } else if (parts.length == 1) {
-            return new String[]{"Unknown", parts[0]};
-        }
-
-        return new String[]{"Unknown", "Unknown"};
     }
 }

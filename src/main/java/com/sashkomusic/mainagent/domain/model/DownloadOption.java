@@ -5,8 +5,8 @@ import java.util.Map;
 
 public record DownloadOption(
         String id,
-        String sourceName,
-        String distributorName,
+        DownloadEngine source,
+        String displayName,
         int totalSize,
         List<FileItem> files,
         Map<String, String> technicalMetadata

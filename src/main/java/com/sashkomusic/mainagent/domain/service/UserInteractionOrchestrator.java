@@ -49,8 +49,8 @@ public class UserInteractionOrchestrator {
         if (data.startsWith("PAGE:")) {
             return releaseSearchFlowService.buildPageResponse(chatId, getPage(data));
         }
-        if (data.startsWith("DL:")) {
-            return List.of(musicDownloadFlowService.handleCallback(chatId, data));
+        if (data.startsWith("DL:") || data.startsWith("SEARCH_ALT:")) {
+            return musicDownloadFlowService.handleCallback(chatId, data);
         }
         if (data.equals("DIG_DEEPER")) {
             return releaseSearchFlowService.switchStrategyAndSearch(chatId);

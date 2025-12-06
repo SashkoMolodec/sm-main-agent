@@ -2,10 +2,12 @@ package com.sashkomusic.mainagent.domain.service.download;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
+import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.domain.util.ReleaseCardFormatter;
 import com.sashkomusic.mainagent.messaging.consumer.dto.SearchFilesResultDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.DownloadFilesTaskDto;
@@ -16,7 +18,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -28,45 +32,96 @@ public class MusicDownloadFlowService {
     private final DownloadTaskProducer downloadTaskProducer;
     private final SearchContextService contextService;
     private final DownloadContextHolder downloadContextHolder;
-    private final DownloadOptionsAnalyzer analyzer;
+    private final DownloadAnalyzerFactory analyzerFactory;
     private final DownloadOptionsFormatter formatter;
     private final ReleaseSearchFlowService releaseSearchFlowService;
+    private final DownloadSourceHandlerFactory handlerFactory;
+    private final Map<SearchEngine, SearchEngineService> searchEngines;
 
-    public BotResponse handleCallback(long chatId, String data) {
+    public List<BotResponse> handleCallback(long chatId, String data) {
         if (data.startsWith("DL:")) {
             String releaseId = data.substring(3);
             log.info("User selected release ID: {}", releaseId);
 
             ReleaseMetadata metadata = contextService.getReleaseMetadata(releaseId);
             if (metadata == null) {
-                return BotResponse.text("❌ шось ся не получило...найди реліз ше раз");
+                return List.of(BotResponse.text("❌ шось ся не получило...найди реліз ше раз"));
             }
-
-            return startFileSearch(chatId, metadata);
+            return initiateDownloadSearch(chatId, metadata);
         }
 
-        return BotResponse.text("тєжко.");
+        if (data.startsWith("SEARCH_ALT:")) {
+            int lastColonIndex = data.lastIndexOf(':');
+            if (lastColonIndex == -1 || lastColonIndex <= "SEARCH_ALT:".length()) {
+                return List.of(BotResponse.text("❌ шось не то з командою"));
+            }
+
+            String releaseId = data.substring("SEARCH_ALT:".length(), lastColonIndex);
+            String sourceName = data.substring(lastColonIndex + 1);
+
+            log.info("Alternative search requested: releaseId={}, source={}", releaseId, sourceName);
+
+            ReleaseMetadata metadata = contextService.getReleaseMetadata(releaseId);
+            if (metadata == null) {
+                return List.of(BotResponse.text("❌ шось ся не получило...найди реліз ше раз"));
+            }
+
+            var source = DownloadEngine.valueOf(sourceName);
+            return initiateDownloadSearch(chatId, metadata, source);
+        }
+
+        return List.of(BotResponse.text("тєжко."));
     }
 
-    private BotResponse startFileSearch(long chatId, ReleaseMetadata metadata) {
-        searchFilesProducer.send(SearchFilesTaskDto.of(chatId, metadata.id(), metadata.artist(), metadata.title()));
+    private List<BotResponse> initiateDownloadSearch(long chatId, ReleaseMetadata metadata) {
+        return initiateDownloadSearch(chatId, metadata, null);
+    }
 
-        return BotResponse.text(
-                "🔎 шукаю: _%s - %s_".formatted(
+    private List<BotResponse> initiateDownloadSearch(long chatId, ReleaseMetadata metadata, DownloadEngine source) {
+        log.info("Initiating download search for: {} - {}", metadata.artist(), metadata.title());
+
+        searchFilesProducer.send(SearchFilesTaskDto.of(chatId, metadata.id(), metadata.artist(), metadata.title(), source));
+
+        return List.of(BotResponse.text(
+                "🔎 шукаю опції завантаження (%s): _%s - %s_".formatted(
+                        source.name().toLowerCase(),
                         metadata.artist(),
                         metadata.title()).toLowerCase()
-        );
+        ));
     }
 
-    public String handleSearchResults(SearchFilesResultDto dto) {
+    public BotResponse handleSearchResults(SearchFilesResultDto dto) {
         log.info("Processing search results for chatId={}, releaseId={}", dto.chatId(), dto.releaseId());
 
+        var analyzer = analyzerFactory.getAnalyzer(dto.results());
         var analysisResult = analyzer.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
         downloadContextHolder.saveDownloadOptions(dto.chatId(), dto.releaseId(), reports);
 
         reports.forEach(r -> log.info("{}", r));
-        return formatter.format(reports, analysisResult.aiSummary());
+
+        if (!dto.results().isEmpty()) {
+            var currentSource = dto.results().getFirst().source();
+            var handler = handlerFactory.getHandler(currentSource);
+
+            if (handler.shouldAutoDownload(reports)) {
+                var chosenReport = reports.getFirst();
+                var option = chosenReport.option();
+
+                log.info("Auto-downloading from {}: {}", currentSource, option.displayName());
+
+                downloadTaskProducer.send(DownloadFilesTaskDto.of(dto.chatId(), dto.releaseId(), option));
+
+                String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
+                return BotResponse.text(message);
+            }
+
+            String text = formatter.format(reports, analysisResult.aiSummary());
+            return handler.buildSearchResultsResponse(text, dto.releaseId(), currentSource);
+        }
+
+        String text = formatter.format(reports, analysisResult.aiSummary());
+        return BotResponse.text(text);
     }
 
     public List<BotResponse> handleDownloadOption(long chatId, String rawInput) {
@@ -84,18 +139,12 @@ public class MusicDownloadFlowService {
         var option = chosenReport.option();
         String releaseId = downloadContextHolder.getChosenRelease(chatId);
 
-        log.info("User chose option #{}: {} from {}", optionNumber, option.id(), option.distributorName());
+        log.info("User chose option #{}: {} from {}", optionNumber, option.id(), option.displayName());
 
         downloadTaskProducer.send(DownloadFilesTaskDto.of(chatId, releaseId, option));
 
-        String message = "✅ **ок, качаю:**\n%s - %s\n📦 %d файлів, %d MB"
-                .formatted(
-                        option.distributorName(),
-                        option.sourceName(),
-                        option.files().size(),
-                        option.totalSize()
-                );
-
+        var handler = handlerFactory.getHandler(option.source());
+        String message = handler.formatDownloadConfirmation(option);
         return List.of(BotResponse.text(message));
     }
 
@@ -116,17 +165,18 @@ public class MusicDownloadFlowService {
                 searchResult.searchRequest(), searchResult.releases());
         contextService.saveReleaseMetadata(selectedRelease);
 
-        return List.of(
-                buildReleaseFoundCard(selectedRelease, searchResult.engine()),
-                startFileSearch(chatId, selectedRelease)
-        );
+        List<BotResponse> responses = new ArrayList<>();
+        responses.add(buildReleaseFoundCard(selectedRelease, searchResult.engine()));
+        responses.addAll(initiateDownloadSearch(chatId, selectedRelease));
+
+        return responses;
     }
 
     private BotResponse buildReleaseFoundCard(ReleaseMetadata release, SearchEngine engine) {
         String cardText = ReleaseCardFormatter.formatCardText(release);
 
         var buttons = new java.util.LinkedHashMap<String, String>();
-        String releaseUrl = buildReleaseUrl(release, engine);
+        String releaseUrl = searchEngines.get(engine).buildReleaseUrl(release);
         if (releaseUrl != null) {
             String buttonLabel = switch (engine) {
                 case MUSICBRAINZ -> "🎵 musicbrainz";
@@ -138,33 +188,5 @@ public class MusicDownloadFlowService {
         }
 
         return BotResponse.card(cardText, release.getCoverArtUrl(), buttons.isEmpty() ? null : buttons);
-    }
-
-    private String buildReleaseUrl(ReleaseMetadata release, SearchEngine engine) {
-        if (engine == null) return null;
-
-        return switch (engine) {
-            case MUSICBRAINZ -> {
-                // Use release group ID (masterId) if available, otherwise release ID
-                String id = release.masterId() != null ? release.masterId() : release.id();
-                String type = release.masterId() != null ? "release-group" : "release";
-                yield "https://musicbrainz.org/" + type + "/" + id;
-            }
-            case DISCOGS -> {
-                // Parse "discogs:master:123" or "discogs:release:456"
-                if (release.id().startsWith("discogs:master:")) {
-                    String masterId = release.id().substring("discogs:master:".length());
-                    yield "https://www.discogs.com/master/" + masterId;
-                } else if (release.id().startsWith("discogs:release:")) {
-                    String releaseId = release.id().substring("discogs:release:".length());
-                    yield "https://www.discogs.com/release/" + releaseId;
-                }
-                yield null;
-            }
-            case BANDCAMP -> {
-                // Bandcamp URL is stored in masterId field
-                yield release.masterId();
-            }
-        };
     }
 }

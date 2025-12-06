@@ -318,4 +318,17 @@ public class DiscogsClient implements SearchEngineService {
     public String getName() {
         return "discogs";
     }
+
+    @Override
+    public String buildReleaseUrl(ReleaseMetadata release) {
+        // Parse "discogs:master:123" or "discogs:release:456"
+        if (release.id().startsWith("discogs:master:")) {
+            String masterId = release.id().substring("discogs:master:".length());
+            return "https://www.discogs.com/master/" + masterId;
+        } else if (release.id().startsWith("discogs:release:")) {
+            String releaseId = release.id().substring("discogs:release:".length());
+            return "https://www.discogs.com/release/" + releaseId;
+        }
+        return null;
+    }
 }

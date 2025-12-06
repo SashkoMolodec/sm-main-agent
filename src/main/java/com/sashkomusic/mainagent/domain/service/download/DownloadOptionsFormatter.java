@@ -28,20 +28,25 @@ public class DownloadOptionsFormatter {
             var option = report.option();
             var suitability = report.suitability();
 
-            String format = detectFormat(option);
-            int fileCount = option.files().size();
+            if (option.files().isEmpty()) {
+                sb.append("%s **%s**\n\n"
+                        .formatted(getIndexIcon(i), "`%s`".formatted(option.displayName())));
+            } else {
+                String format = detectFormat(option);
+                int fileCount = option.files().size();
 
-            sb.append("%s **[%s]** • %d ф. • %d MB (%s)\n"
-                    .formatted(getIndexIcon(i), format, fileCount, option.totalSize(), suitability.icon));
+                sb.append("%s **[%s]** • %d ф. • %d MB (%s)\n"
+                        .formatted(getIndexIcon(i), format, fileCount, option.totalSize(), suitability.icon));
 
-            option.files().stream()
-                    .limit(7)
-                    .forEach(f -> sb.append("   📄 `%s`\n".formatted(f.displayName())));
+                option.files().stream()
+                        .limit(7)
+                        .forEach(f -> sb.append("   📄 `%s`\n".formatted(f.displayName())));
 
-            if (option.files().size() > 7) {
-                sb.append("   ... _та ще %d файлів_\n".formatted(option.files().size() - 7));
+                if (option.files().size() > 7) {
+                    sb.append("   ... _та ще %d файлів_\n".formatted(option.files().size() - 7));
+                }
+                sb.append("\n");
             }
-            sb.append("\n");
             i++;
         }
 
