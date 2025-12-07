@@ -3,6 +3,7 @@ package com.sashkomusic.mainagent.infrastracture.client.musicbrainz;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
 import lombok.extern.slf4j.Slf4j;
@@ -144,7 +145,8 @@ public class MusicBrainzClient implements SearchEngineService {
                                     ac.artist().name(),
                                     ac.artist().sortName(),
                                     null // disambiguation not present in recording response
-                            )
+                            ),
+                            ac.joinphrase()
                     ))
                     .toList();
         }
@@ -346,7 +348,21 @@ public class MusicBrainzClient implements SearchEngineService {
 
     private String getArtistName(MusicBrainzSearchResponse.Release release) {
         if (release.artistCredit() != null && !release.artistCredit().isEmpty()) {
-            return release.artistCredit().getFirst().name();
+            // Combine multiple artists using joinphrase
+            StringBuilder artistBuilder = new StringBuilder();
+            var artistCredits = release.artistCredit();
+
+            for (int i = 0; i < artistCredits.size(); i++) {
+                var credit = artistCredits.get(i);
+                artistBuilder.append(credit.name());
+
+                // Add joinphrase if provided (e.g., " & ", " feat. ")
+                if (credit.joinphrase() != null && !credit.joinphrase().isEmpty()) {
+                    artistBuilder.append(credit.joinphrase());
+                }
+            }
+
+            return artistBuilder.toString().trim();
         }
         return "Unknown Artist";
     }
@@ -359,14 +375,14 @@ public class MusicBrainzClient implements SearchEngineService {
     }
 
     @Override
-    public List<String> getTracks(String releaseId) {
+    public List<TrackMetadata> getTracks(String releaseId) {
         log.info("Fetching tracklist for release ID: {}", releaseId);
 
         try {
             var release = client.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/release/{id}")
-                            .queryParam("inc", "recordings")
+                            .queryParam("inc", "recordings+artist-credits")
                             .queryParam("fmt", "json")
                             .build(releaseId))
                     .retrieve()
@@ -377,9 +393,40 @@ public class MusicBrainzClient implements SearchEngineService {
                 return List.of();
             }
 
+            // Get album artist as fallback
+            String albumArtist = getArtistName(release);
+
             return release.media().stream()
                     .flatMap(media -> media.tracks() != null ? media.tracks().stream() : java.util.stream.Stream.empty())
-                    .map(track -> track.recording() != null ? track.recording().title() : track.title())
+                    .map(track -> {
+                        int trackNumber = track.position();
+                        String trackTitle = track.recording() != null ? track.recording().title() : track.title();
+
+                        // Extract per-track artist from recording.artistCredit when available
+                        String trackArtist = albumArtist; // Default to album artist
+
+                        if (track.recording() != null && track.recording().artistCredit() != null
+                                && !track.recording().artistCredit().isEmpty()) {
+                            // Combine multiple artists using joinphrase (e.g., "HATELOVE & Wanton")
+                            StringBuilder artistBuilder = new StringBuilder();
+                            var artistCredits = track.recording().artistCredit();
+
+                            for (int i = 0; i < artistCredits.size(); i++) {
+                                var credit = artistCredits.get(i);
+                                artistBuilder.append(credit.name());
+
+                                // Add joinphrase if provided (e.g., " & ", " feat. ")
+                                if (credit.joinphrase() != null && !credit.joinphrase().isEmpty()) {
+                                    artistBuilder.append(credit.joinphrase());
+                                }
+                            }
+
+                            trackArtist = artistBuilder.toString().trim();
+                            log.debug("Using per-track artist from recording: '{}'", trackArtist);
+                        }
+
+                        return new TrackMetadata(trackNumber, trackArtist, trackTitle);
+                    })
                     .toList();
 
         } catch (Exception ex) {

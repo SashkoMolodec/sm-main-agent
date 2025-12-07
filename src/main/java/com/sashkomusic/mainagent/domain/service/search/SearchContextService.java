@@ -1,10 +1,7 @@
 package com.sashkomusic.mainagent.domain.service.search;
 
 import com.sashkomusic.mainagent.domain.exception.SearchSessionExpiredException;
-import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
-import com.sashkomusic.mainagent.domain.model.SearchEngine;
-import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.model.SearchContext;
+import com.sashkomusic.mainagent.domain.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -91,7 +88,7 @@ public class SearchContextService {
             SearchEngine searchEngine = getSearchEngine(chatId);
             SearchEngineService engine = searchEngines.get(searchEngine);
 
-            List<String> tracks = engine.getTracks(releaseId);
+            List<TrackMetadata> tracks = engine.getTracks(releaseId);
 
             if (tracks != null && !tracks.isEmpty()) {
                 ReleaseMetadata enriched = metadata.withTracks(tracks);

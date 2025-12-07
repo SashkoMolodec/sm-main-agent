@@ -56,7 +56,8 @@ public record RecordingSearchResponse(
 
     public record ArtistCredit(
             String name,
-            Artist artist
+            Artist artist,
+            String joinphrase
     ) {
     }
 

@@ -3,6 +3,7 @@ package com.sashkomusic.mainagent.infrastracture.client.bandcamp;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import lombok.extern.slf4j.Slf4j;
@@ -365,7 +366,7 @@ public class BandcampClient implements SearchEngineService {
     }
 
     @Override
-    public List<String> getTracks(String releaseId) {
+    public List<TrackMetadata> getTracks(String releaseId) {
         log.info("Fetching tracklist from Bandcamp for release ID: {}", releaseId);
 
         try {
@@ -391,12 +392,41 @@ public class BandcampClient implements SearchEngineService {
 
             // Parse track list from table
             Document doc = Jsoup.parse(html);
-            var trackElements = doc.select("table.track_list tr.track_row_view span.track-title");
+            var trackRows = doc.select("table.track_list tr.track_row_view");
 
-            List<String> tracks = trackElements.stream()
-                    .map(Element::text)
-                    .filter(t -> !t.isEmpty())
-                    .toList();
+            // Get album artist from metadata
+            String albumArtist = metadata.artist();
+
+            List<TrackMetadata> tracks = new ArrayList<>();
+            int trackNumber = 1;
+
+            for (Element row : trackRows) {
+                Element titleElement = row.selectFirst("span.track-title");
+                if (titleElement != null) {
+                    String title = titleElement.text().trim();
+                    if (!title.isEmpty()) {
+                        // Try to parse per-track artist from title if format is "Artist - Title"
+                        String trackArtist = albumArtist;
+                        String trackTitle = title;
+
+                        if (title.contains(" - ")) {
+                            int dashIndex = title.indexOf(" - ");
+                            String possibleArtist = title.substring(0, dashIndex).trim();
+                            String possibleTitle = title.substring(dashIndex + 3).trim();
+
+                            // Only split if the artist part looks reasonable (not empty, not too long)
+                            if (!possibleArtist.isEmpty() && possibleArtist.length() < 100 && !possibleTitle.isEmpty()) {
+                                trackArtist = possibleArtist;
+                                trackTitle = possibleTitle;
+                                log.debug("Parsed track artist from title: '{}' - '{}'", trackArtist, trackTitle);
+                            }
+                        }
+
+                        tracks.add(new TrackMetadata(trackNumber, trackArtist, trackTitle));
+                        trackNumber++;
+                    }
+                }
+            }
 
             log.info("Found {} tracks for release {}", tracks.size(), releaseId);
             return tracks;

@@ -191,6 +191,8 @@ public interface AiService {
             7. Return empty strings for missing fields (null for dateRange)
 
             OUTPUT STRUCTURE (MetadataSearchRequest format):
+            Return ONLY valid JSON without any markdown formatting or code blocks.
+            DO NOT wrap JSON in ```json or ``` blocks.
             {
               "id": null,
               "artist": "extracted artist name",
@@ -329,6 +331,8 @@ public interface AiService {
         - Otherwise -> EN
 
         OUTPUT STRUCTURE:
+        Return ONLY valid JSON without any markdown formatting or code blocks.
+        DO NOT wrap JSON in ```json or ``` blocks.
         {
           "id": null,
           "artist": "extracted artist name (empty if not found)",
@@ -509,6 +513,9 @@ public interface AiService {
         4. Be flexible with format names (vinyl = вініл = платівка)
         5. Detect language from input (UA or EN)
         6. If field not found, use empty string (or null for dateRange)
+
+        Return ONLY valid JSON without any markdown formatting or code blocks.
+        DO NOT wrap JSON in ```json or ``` blocks.
 
         EXAMPLES:
         Input: "kaseta, 1990"

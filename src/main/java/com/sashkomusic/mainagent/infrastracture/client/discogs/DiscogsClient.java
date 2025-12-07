@@ -3,6 +3,7 @@ package com.sashkomusic.mainagent.infrastracture.client.discogs;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -238,7 +239,7 @@ public class DiscogsClient implements SearchEngineService {
     }
 
     @Override
-    public List<String> getTracks(String releaseId) {
+    public List<TrackMetadata> getTracks(String releaseId) {
         log.info("Fetching tracklist from Discogs for release ID: {}", releaseId);
 
         // Parse releaseId format: "discogs:master:123" or "discogs:release:456"
@@ -269,7 +270,7 @@ public class DiscogsClient implements SearchEngineService {
         }
     }
 
-    private List<String> getTracksFromMaster(String masterId) {
+    private List<TrackMetadata> getTracksFromMaster(String masterId) {
         log.info("Fetching master {} to get main release", masterId);
 
         var masterResponse = client.get()
@@ -290,7 +291,7 @@ public class DiscogsClient implements SearchEngineService {
         return getTracksFromRelease(String.valueOf(masterResponse.mainRelease()));
     }
 
-    private List<String> getTracksFromRelease(String releaseId) {
+    private List<TrackMetadata> getTracksFromRelease(String releaseId) {
         log.info("Fetching tracklist for release {}", releaseId);
 
         var response = client.get()
@@ -309,9 +310,78 @@ public class DiscogsClient implements SearchEngineService {
             return List.of();
         }
 
+        // Get album artist from response
+        String albumArtist = extractArtistName(response);
+
+        // Build TrackMetadata with position numbers
         return response.tracklist().stream()
-                .map(DiscogsReleaseResponse.Track::title)
+                .map(track -> {
+                    int trackNumber = parseTrackPosition(track.position());
+                    String trackTitle = track.title();
+                    String trackArtist = albumArtist; // Default to album artist
+
+                    // Priority 1: Use track's artists field from Discogs API (most accurate)
+                    if (track.artists() != null && !track.artists().isEmpty()) {
+                        // Combine multiple artists using their 'join' field (e.g., "HATELOVE & Wanton")
+                        StringBuilder artistBuilder = new StringBuilder();
+                        for (int i = 0; i < track.artists().size(); i++) {
+                            var artist = track.artists().get(i);
+                            artistBuilder.append(cleanArtistName(artist.name()));
+
+                            // Add join separator if not the last artist and join is provided
+                            if (i < track.artists().size() - 1 && artist.join() != null && !artist.join().isEmpty()) {
+                                artistBuilder.append(" ").append(artist.join()).append(" ");
+                            }
+                        }
+                        trackArtist = artistBuilder.toString().trim();
+                        log.debug("Using per-track artist from Discogs API: '{}'", trackArtist);
+                    }
+                    // Priority 2: Try to parse from title if format is "Artist - Title"
+                    else if (trackTitle != null && trackTitle.contains(" - ")) {
+                        int dashIndex = trackTitle.indexOf(" - ");
+                        String possibleArtist = trackTitle.substring(0, dashIndex).trim();
+                        String possibleTitle = trackTitle.substring(dashIndex + 3).trim();
+
+                        // Only split if the artist part looks reasonable (not empty, not too long)
+                        if (!possibleArtist.isEmpty() && possibleArtist.length() < 100 && !possibleTitle.isEmpty()) {
+                            trackArtist = cleanArtistName(possibleArtist);
+                            trackTitle = possibleTitle;
+                            log.debug("Parsed track artist from title: '{}' - '{}'", trackArtist, trackTitle);
+                        }
+                    }
+                    // Priority 3: Fall back to album artist (already set as default)
+
+                    return new TrackMetadata(trackNumber, trackArtist, trackTitle);
+                })
                 .toList();
+    }
+
+    private String extractArtistName(DiscogsReleaseResponse response) {
+        if (response.artists() != null && !response.artists().isEmpty()) {
+            return cleanArtistName(response.artists().getFirst().name());
+        }
+        return "Unknown Artist";
+    }
+
+    private int parseTrackPosition(String position) {
+        if (position == null || position.isEmpty()) {
+            return 0;
+        }
+        // Handle formats like "1", "A1", "B2", etc.
+        try {
+            // Try to extract number from position (e.g., "A1" -> 1, "B2" -> 2)
+            return Integer.parseInt(position.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private String cleanArtistName(String artistName) {
+        if (artistName == null || artistName.isEmpty()) {
+            return artistName;
+        }
+        // Remove disambiguation suffix: " (number)" at the end
+        return artistName.replaceAll("\\s*\\(\\d+\\)\\s*$", "").trim();
     }
 
     @Override

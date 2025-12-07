@@ -14,7 +14,7 @@ public record ReleaseMetadata(
         int minTracks,
         int maxTracks,
         int totalReleasesFound,
-        List<String> trackTitles,
+        List<TrackMetadata> tracks,
         String coverUrl,
         List<String> tags,
         String label
@@ -62,7 +62,7 @@ public record ReleaseMetadata(
         return label;
     }
 
-    public ReleaseMetadata withTracks(List<String> tracks) {
+    public ReleaseMetadata withTracks(List<TrackMetadata> trackMetadata) {
         return new ReleaseMetadata(
                 this.id,
                 this.masterId,
@@ -75,10 +75,20 @@ public record ReleaseMetadata(
                 this.minTracks,
                 this.maxTracks,
                 this.totalReleasesFound,
-                tracks,
+                trackMetadata,
                 this.coverUrl,
                 this.tags,
                 this.label
         );
+    }
+
+    // Helper method for backward compatibility - returns track titles only
+    public List<String> trackTitles() {
+        if (tracks == null || tracks.isEmpty()) {
+            return List.of();
+        }
+        return tracks.stream()
+                .map(TrackMetadata::title)
+                .toList();
     }
 }

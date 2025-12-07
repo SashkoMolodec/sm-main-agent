@@ -68,7 +68,8 @@ public record MusicBrainzSearchResponse(
 
     public record ArtistCredit(
             String name,
-            Artist artist
+            Artist artist,
+            String joinphrase
     ) {
     }
 
@@ -161,7 +162,9 @@ public record MusicBrainzSearchResponse(
 
     public record Recording(
             String id,
-            String title
+            String title,
+            @JsonProperty("artist-credit")
+            List<ArtistCredit> artistCredit
     ) {
     }
 
