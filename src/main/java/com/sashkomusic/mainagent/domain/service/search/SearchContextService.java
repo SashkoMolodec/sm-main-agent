@@ -17,6 +17,9 @@ public class SearchContextService {
     private final Map<Long, SearchContext> userSearches = new ConcurrentHashMap<>();
     private final Map<SearchEngine, SearchEngineService> searchEngines;
 
+    // not used currently
+    private final Map<String, Map<String, String>> platformLinksCache = new ConcurrentHashMap<>();
+
     public SearchContextService(Map<SearchEngine, SearchEngineService> searchEngines) {
         this.searchEngines = searchEngines;
     }
@@ -103,5 +106,14 @@ public class SearchContextService {
             log.error("Failed to fetch tracks for releaseId={}: {}", releaseId, e.getMessage(), e);
             return metadata;
         }
+    }
+
+    public Map<String, String> getCachedPlatformLinks(String releaseId) {
+        return platformLinksCache.get(releaseId);
+    }
+
+    public void cachePlatformLinks(String releaseId, Map<String, String> platforms) {
+        platformLinksCache.put(releaseId, platforms);
+        log.debug("Cached platform links for releaseId={}", releaseId);
     }
 }

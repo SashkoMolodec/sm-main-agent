@@ -25,4 +25,13 @@ public class SearchUrlUtils {
             case EN -> "album";
         };
     }
+
+    public static String buildSearchQuery(String artist, String title) {
+        return artist + " " + title;
+    }
+
+    public static String buildDiscogsSearchUrl(String artist, String title) {
+        String query = buildSearchQuery(artist, title);
+        return "URL:https://www.discogs.com/search/?q=" + encode(query);
+    }
 }

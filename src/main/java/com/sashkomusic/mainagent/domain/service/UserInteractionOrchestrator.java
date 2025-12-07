@@ -6,6 +6,7 @@ import com.sashkomusic.mainagent.domain.model.UserIntent;
 import com.sashkomusic.mainagent.domain.service.download.MusicDownloadFlowService;
 import com.sashkomusic.mainagent.domain.service.process.ProcessFolderFlowService;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
+import com.sashkomusic.mainagent.domain.service.streaming.StreamingFlowService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class UserInteractionOrchestrator {
     private final MusicDownloadFlowService musicDownloadFlowService;
     private final ReleaseSearchFlowService releaseSearchFlowService;
     private final ProcessFolderFlowService processFolderFlowService;
+    private final StreamingFlowService streamingFlowService;
 
     public List<BotResponse> handleUserRequest(long chatId, String rawInput) {
         var res = processUserCommands(chatId, rawInput);
@@ -47,7 +49,7 @@ public class UserInteractionOrchestrator {
 
     public List<BotResponse> handleCallback(long chatId, String data) {
         if (data.startsWith("PAGE:")) {
-            return releaseSearchFlowService.buildPageResponse(chatId, getPage(data));
+            return releaseSearchFlowService.handlePageCallback(chatId, data);
         }
         if (data.startsWith("DL:") || data.startsWith("SEARCH_ALT:")) {
             return musicDownloadFlowService.handleCallback(chatId, data);
@@ -55,26 +57,20 @@ public class UserInteractionOrchestrator {
         if (data.equals("DIG_DEEPER")) {
             return releaseSearchFlowService.switchStrategyAndSearch(chatId);
         }
+        if (data.startsWith("STREAM:")) {
+            return streamingFlowService.handleStreamingPlatforms(chatId, data);
+        }
         return List.of(BotResponse.text("хз, пупупу"));
     }
 
     private List<BotResponse> processUserCommands(long chatId, String rawInput) {
         if (rawInput.startsWith("/process")) {
-            return handleProcessCommand(chatId, rawInput);
+            return processFolderFlowService.handleProcessCommand(chatId, rawInput);
         }
 
         if (processFolderFlowService.hasActiveContext(chatId)) {
             return processFolderFlowService.handleMetadataSelection(chatId, rawInput);
         }
         return Collections.emptyList();
-    }
-
-    private List<BotResponse> handleProcessCommand(long chatId, String rawInput) {
-        String folderName = rawInput.substring(9).trim();
-        return processFolderFlowService.process(chatId, folderName);
-    }
-
-    private static int getPage(String data) {
-        return Integer.parseInt(data.substring(5));
     }
 }

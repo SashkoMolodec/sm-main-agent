@@ -2,7 +2,6 @@ package com.sashkomusic.mainagent.domain.service.search;
 
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
-import com.sashkomusic.mainagent.domain.model.Language;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
@@ -37,8 +36,7 @@ public class ReleaseSearchFlowService {
         contextService.saveSearchContext(chatId, searchEngine, rawInput, searchRequest, releases);
 
         if (releases.isEmpty()) {
-            var buttons = buildSearchButtons(searchRequest);
-            buttons.put("⛏️", "DIG_DEEPER");
+            var buttons = buildEmptyResultsButtons(searchRequest);
             return List.of(BotResponse.withButtons("😔 нич не знайшов в тому %s.".formatted(engine.getName()), buttons));
         }
         return buildPageResponse(chatId, 0);
@@ -75,7 +73,13 @@ public class ReleaseSearchFlowService {
         return new SearchResult(List.of(), null, searchRequest);
     }
 
-    public record SearchResult(List<ReleaseMetadata> releases, SearchEngine engine, MetadataSearchRequest searchRequest) {
+    public record SearchResult(List<ReleaseMetadata> releases, SearchEngine engine,
+                               MetadataSearchRequest searchRequest) {
+    }
+
+    public List<BotResponse> handlePageCallback(long chatId, String callbackData) {
+        int page = Integer.parseInt(callbackData.substring("PAGE:".length()));
+        return buildPageResponse(chatId, page);
     }
 
     public List<BotResponse> buildPageResponse(long chatId, int page) {
@@ -103,19 +107,39 @@ public class ReleaseSearchFlowService {
         return responses;
     }
 
-    private static BotResponse buildReleaseCard(ReleaseMetadata release, MetadataSearchRequest searchRequest) {
+    private BotResponse buildReleaseCard(ReleaseMetadata release, MetadataSearchRequest searchRequest) {
         String cardText = ReleaseCardFormatter.formatCardText(release);
 
         Map<String, String> buttons = new LinkedHashMap<>();
-        buttons.put("▶️", buildYoutubeUrl(release.artist(), release.title()));
-        buttons.put("💿", buildDiscogsUrl(release.artist(), release.title()));
-        buttons.put("📼", buildBandcampUrl(release.artist(), release.title()));
+        buttons.put("🎧", "STREAM:" + release.id());
+
+        String releaseUrl = buildReleaseUrlForSource(release);
+        if (releaseUrl != null) {
+            buttons.put("🔗", releaseUrl);
+        }
+
         buttons.put("⬇️", "DL:" + release.id());
 
         return BotResponse.card(
                 cardText,
                 release.getCoverArtUrl(),
                 buttons);
+    }
+
+    private String buildReleaseUrlForSource(ReleaseMetadata release) {
+        try {
+            SearchEngine engine = SearchEngine.valueOf(release.source().name());
+            SearchEngineService service = searchEngines.get(engine);
+            if (service != null) {
+                String url = service.buildReleaseUrl(release);
+                if (url != null && !url.isEmpty()) {
+                    return "URL:" + url;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to build release URL for source {}: {}", release.source(), e.getMessage());
+        }
+        return null;
     }
 
     private static BotResponse buildPageNavigation(List<ReleaseMetadata> releases, int page, int end) {
@@ -144,34 +168,11 @@ public class ReleaseSearchFlowService {
         }
     }
 
-    private static Map<String, String> buildSearchButtons(MetadataSearchRequest searchRequest) {
-        Map<String, String> buttons = new LinkedHashMap<>();
-        String artist = searchRequest.artist();
-        String title = searchRequest.getTitle();
-        buttons.put("▶️", buildYoutubeUrl(artist, title));
-        buttons.put("💿", buildDiscogsUrl(artist, title));
-        buttons.put("📼", buildBandcampUrl(artist, title));
+    private static LinkedHashMap<String, String> buildEmptyResultsButtons(MetadataSearchRequest searchRequest) {
+        var buttons = new LinkedHashMap<String, String>();
+        buttons.put("🎧", "STREAM:");
+        buttons.put("💿", SearchUrlUtils.buildDiscogsSearchUrl(searchRequest.artist(), searchRequest.getTitle()));
+        buttons.put("⛏️", "DIG_DEEPER");
         return buttons;
     }
-
-    private static String buildYoutubeUrl(String artist, String title) {
-        Language language = SearchUrlUtils.detectLanguage(artist, title);
-        String albumWord = SearchUrlUtils.buildYoutubeAlbumWord(language);
-        String query = artist + " " + title + " " + albumWord;
-        String url = "https://www.youtube.com/results?search_query=" + SearchUrlUtils.encode(query);
-        return "URL:" + url;
-    }
-
-    private static String buildDiscogsUrl(String artist, String title) {
-        String query = artist + " " + title;
-        String url = "https://www.discogs.com/search/?q=" + SearchUrlUtils.encode(query);
-        return "URL:" + url;
-    }
-
-    private static String buildBandcampUrl(String artist, String title) {
-        String query = artist + " " + title;
-        String url = "https://bandcamp.com/search?q=" + SearchUrlUtils.encode(query);
-        return "URL:" + url;
-    }
-
 }

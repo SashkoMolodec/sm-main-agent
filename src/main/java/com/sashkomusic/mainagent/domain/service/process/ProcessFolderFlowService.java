@@ -51,6 +51,11 @@ public class ProcessFolderFlowService {
             "mp3", "flac", "m4a", "ogg", "wav", "opus", "aac"
     );
 
+    public List<BotResponse> handleProcessCommand(long chatId, String rawInput) {
+        String folderName = extractFolderName(rawInput);
+        return process(chatId, folderName);
+    }
+
     public List<BotResponse> process(long chatId, String input) {
         try {
             FolderParseResult parseResult = parseFolderAndFilters(input);
@@ -407,5 +412,9 @@ public class ProcessFolderFlowService {
     private boolean isAudioFile(Path file) {
         String filename = file.getFileName().toString().toLowerCase();
         return AUDIO_EXTENSIONS.stream().anyMatch(ext -> filename.endsWith("." + ext));
+    }
+
+    private String extractFolderName(String rawInput) {
+        return rawInput.substring("/process ".length()).trim();
     }
 }

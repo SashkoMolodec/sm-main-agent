@@ -142,7 +142,7 @@ public class DiscogsClient implements SearchEngineService {
         String artist = extractArtist(representative.title());
         String title = extractTitle(representative.title());
 
-        artist = clean(artist);
+        artist = cleanArtistName(clean(artist));
         title = clean(title);
 
         List<String> years = groupResults.stream()

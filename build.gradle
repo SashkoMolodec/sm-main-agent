@@ -26,7 +26,9 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
     implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'org.springframework.retry:spring-retry'
 
     implementation 'dev.langchain4j:langchain4j-spring-boot-starter:1.8.0-beta15'
     implementation 'dev.langchain4j:langchain4j-anthropic-spring-boot-starter:1.8.0-beta15'
