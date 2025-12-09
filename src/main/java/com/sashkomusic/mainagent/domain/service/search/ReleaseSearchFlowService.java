@@ -155,7 +155,7 @@ public class ReleaseSearchFlowService {
 
     private static String resolveFoundReleasesMessage(List<ReleaseMetadata> releases, int page, SearchEngine searchEngine) {
         String engineSuffix = searchEngine != SearchEngine.MUSICBRAINZ
-                ? " (%s)".formatted(searchEngine.name().toLowerCase())
+                ? " (%s)".formatted(searchEngine.getName())
                 : "";
 
         if (page == 0) {
@@ -174,5 +174,23 @@ public class ReleaseSearchFlowService {
         buttons.put("💿", SearchUrlUtils.buildDiscogsSearchUrl(searchRequest.artist(), searchRequest.getTitle()));
         buttons.put("⛏️", "DIG_DEEPER");
         return buttons;
+    }
+
+    public BotResponse buildReleaseDownloadCard(ReleaseMetadata release, SearchEngine engine) {
+        String cardText = ReleaseCardFormatter.formatCardText(release);
+
+        var buttons = new LinkedHashMap<String, String>();
+        String releaseUrl = searchEngines.get(engine).buildReleaseUrl(release);
+        if (releaseUrl != null) {
+            String buttonLabel = switch (engine) {
+                case MUSICBRAINZ -> "🎵 musicbrainz";
+                case DISCOGS -> "💿 discogs";
+                case BANDCAMP -> "📼 bandcamp";
+                default -> "🔗 link";
+            };
+            buttons.put(buttonLabel, "URL:" + releaseUrl);
+        }
+
+        return BotResponse.card(cardText, release.getCoverArtUrl(), buttons.isEmpty() ? null : buttons);
     }
 }

@@ -8,6 +8,7 @@ import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
@@ -22,12 +23,14 @@ import java.util.stream.Stream;
 public class MusicBrainzClient implements SearchEngineService {
 
     private final RestClient client;
+    private final MusicBrainzClient self;
 
-    public MusicBrainzClient(RestClient.Builder builder) {
+    public MusicBrainzClient(RestClient.Builder builder, @Lazy MusicBrainzClient self) {
         this.client = builder
                 .baseUrl("https://musicbrainz.org/ws/2")
                 .defaultHeader("User-Agent", "SashkoMusicBot/1.0 ( contact@example.com )")
                 .build();
+        this.self = self;
     }
 
     @Override
@@ -37,13 +40,13 @@ public class MusicBrainzClient implements SearchEngineService {
 
         if (hasRecording && !hasRelease) {
             log.info("Explicit track search detected, using recording endpoint");
-            return searchByRecording(request);
+            return self.searchByRecording(request);
         }
 
-        var results = searchByRelease(request);
+        var results = self.searchByRelease(request);
         if (results.isEmpty() && hasRecording) {
             log.info("No results from release search, trying recording endpoint as fallback");
-            return searchByRecording(request);
+            return self.searchByRecording(request);
         }
 
         return results;

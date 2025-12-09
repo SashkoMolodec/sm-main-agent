@@ -5,16 +5,17 @@ import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface DownloadFlowHandler {
 
     AnalysisResult analyzeAll(List<DownloadOption> options, String releaseId, long chatId);
 
-    boolean shouldAutoDownload(List<OptionReport> reports);
-
     BotResponse buildSearchResultsResponse(String formattedText, String releaseId, DownloadEngine currentSource);
 
     String formatDownloadConfirmation(DownloadOption option);
+
+    Optional<DownloadEngine> getFallbackDownloadEngine();
 
     record OptionReport(
             DownloadOption option,

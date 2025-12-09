@@ -7,8 +7,6 @@ import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
-import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
-import com.sashkomusic.mainagent.domain.util.ReleaseCardFormatter;
 import com.sashkomusic.mainagent.messaging.consumer.dto.SearchFilesResultDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.DownloadFilesTaskDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.SearchFilesTaskDto;
@@ -32,9 +30,7 @@ public class MusicDownloadFlowService {
     private final DownloadTaskProducer downloadTaskProducer;
     private final SearchContextService contextService;
     private final DownloadContextHolder downloadContextHolder;
-    private final DownloadOptionsFormatter formatter;
     private final ReleaseSearchFlowService releaseSearchFlowService;
-    private final Map<SearchEngine, SearchEngineService> searchEngines;
     private final Map<DownloadEngine, DownloadFlowHandler> downloadFlowHandlers;
 
     public List<BotResponse> handleCallback(long chatId, String data) {
@@ -46,7 +42,7 @@ public class MusicDownloadFlowService {
             if (metadata == null) {
                 return List.of(BotResponse.text("❌ шось ся не получило...найди реліз ше раз"));
             }
-            return initiateDownloadSearch(chatId, metadata);
+            return initiateDefaultDownloadSearch(chatId, metadata);
         }
 
         if (data.startsWith("SEARCH_ALT:")) {
@@ -72,7 +68,7 @@ public class MusicDownloadFlowService {
         return List.of(BotResponse.text("тєжко."));
     }
 
-    private List<BotResponse> initiateDownloadSearch(long chatId, ReleaseMetadata metadata) {
+    private List<BotResponse> initiateDefaultDownloadSearch(long chatId, ReleaseMetadata metadata) {
         return initiateDownloadSearch(chatId, metadata, DownloadEngine.QOBUZ);
     }
 
@@ -83,21 +79,22 @@ public class MusicDownloadFlowService {
 
         return List.of(BotResponse.text(
                 "🔎 шукаю опції завантаження (%s): _%s - %s_".formatted(
-                        source.name().toLowerCase(),
+                        source.getName().toLowerCase(),
                         metadata.artist(),
                         metadata.title()).toLowerCase()
         ));
     }
 
-    public BotResponse handleSearchResults(SearchFilesResultDto dto) {
-        log.info("Processing search results for chatId={}, releaseId={}", dto.chatId(), dto.releaseId());
+    public List<BotResponse> handleSearchResults(SearchFilesResultDto dto) {
+        log.info("Processing search results for chatId={}, releaseId={}, source={}, results count={}",
+                dto.chatId(), dto.releaseId(), dto.source(), dto.results().size());
+
+        var flowHandler = downloadFlowHandlers.get(dto.source());
 
         if (dto.results().isEmpty()) {
-            return BotResponse.text(formatter.format(List.of(), ""));
+            log.info("No results found from {}, checking for fallback", dto.source());
+            return handleFallback(dto, flowHandler);
         }
-
-        var currentSource = dto.results().getFirst().source();
-        var flowHandler = downloadFlowHandlers.get(currentSource);
 
         var analysisResult = flowHandler.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
@@ -105,20 +102,30 @@ public class MusicDownloadFlowService {
 
         reports.forEach(r -> log.info("{}", r));
 
-        if (flowHandler.shouldAutoDownload(reports)) {
-            var chosenReport = reports.getFirst();
-            var option = chosenReport.option();
-
-            log.info("Auto-downloading from {}: {}", currentSource, option.displayName());
-
-            downloadTaskProducer.send(DownloadFilesTaskDto.of(dto.chatId(), dto.releaseId(), option));
-
-            String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
-            return BotResponse.text(message);
+        if (dto.autoDownload()) {
+            return autoDownload(dto, reports);
         }
 
-        String text = formatter.format(reports, analysisResult.aiSummary());
-        return flowHandler.buildSearchResultsResponse(text, dto.releaseId(), currentSource);
+        String text = DownloadOptionsCardFormatter.format(reports, analysisResult.aiSummary());
+        return List.of(flowHandler.buildSearchResultsResponse(text, dto.releaseId(), dto.source()));
+    }
+
+    private List<BotResponse> handleFallback(SearchFilesResultDto dto, DownloadFlowHandler flowHandler) {
+        if (flowHandler.getFallbackDownloadEngine().isPresent()) {
+            return initiateDownloadSearch(dto.chatId(), contextService.getReleaseMetadata(dto.releaseId()), flowHandler.getFallbackDownloadEngine().get());
+        }
+        return List.of(BotResponse.text(DownloadOptionsCardFormatter.format(List.of(), "")));
+    }
+
+    private List<BotResponse> autoDownload(SearchFilesResultDto dto, List<DownloadFlowHandler.OptionReport> reports) {
+        var chosenReport = reports.getFirst();
+        var option = chosenReport.option();
+
+        log.info("Auto-downloading from {}: {}", option.source(), option.displayName());
+        downloadTaskProducer.send(DownloadFilesTaskDto.of(dto.chatId(), dto.releaseId(), option));
+
+        String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
+        return List.of(BotResponse.text(message));
     }
 
     public List<BotResponse> handleDownloadOption(long chatId, String rawInput) {
@@ -163,27 +170,9 @@ public class MusicDownloadFlowService {
         contextService.saveReleaseMetadata(selectedRelease);
 
         List<BotResponse> responses = new ArrayList<>();
-        responses.add(buildReleaseFoundCard(selectedRelease, searchResult.engine()));
-        responses.addAll(initiateDownloadSearch(chatId, selectedRelease));
+        responses.add(releaseSearchFlowService.buildReleaseDownloadCard(selectedRelease, searchResult.engine()));
+        responses.addAll(initiateDefaultDownloadSearch(chatId, selectedRelease));
 
         return responses;
-    }
-
-    private BotResponse buildReleaseFoundCard(ReleaseMetadata release, SearchEngine engine) {
-        String cardText = ReleaseCardFormatter.formatCardText(release);
-
-        var buttons = new java.util.LinkedHashMap<String, String>();
-        String releaseUrl = searchEngines.get(engine).buildReleaseUrl(release);
-        if (releaseUrl != null) {
-            String buttonLabel = switch (engine) {
-                case MUSICBRAINZ -> "🎵 musicbrainz";
-                case DISCOGS -> "💿 discogs";
-                case BANDCAMP -> "📼 bandcamp";
-                default -> "🔗 link";
-            };
-            buttons.put(buttonLabel, "URL:" + releaseUrl);
-        }
-
-        return BotResponse.card(cardText, release.getCoverArtUrl(), buttons.isEmpty() ? null : buttons);
     }
 }

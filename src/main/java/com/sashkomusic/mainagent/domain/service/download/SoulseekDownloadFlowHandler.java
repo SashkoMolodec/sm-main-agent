@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
@@ -51,26 +52,23 @@ public class SoulseekDownloadFlowHandler implements DownloadFlowHandler {
     }
 
     @Override
-    public boolean shouldAutoDownload(List<OptionReport> reports) {
-        // Never auto-download from Soulseek - user should choose
-        return false;
-    }
-
-    @Override
     public BotResponse buildSearchResultsResponse(String formattedText, String releaseId, DownloadEngine currentSource) {
-        // No buttons for Soulseek - just show text
         return BotResponse.text(formattedText);
     }
 
     @Override
     public String formatDownloadConfirmation(DownloadOption option) {
-        // Soulseek: show file count and size
         return "✅ **ок, качаю:**\n%s\n📦 %d файлів, %d MB"
                 .formatted(
                         option.displayName(),
                         option.files().size(),
                         option.totalSize()
                 );
+    }
+
+    @Override
+    public Optional<DownloadEngine> getFallbackDownloadEngine() {
+        return Optional.empty();
     }
 
     @NotNull

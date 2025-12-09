@@ -1,21 +1,19 @@
 package com.sashkomusic.mainagent.domain.service.download;
 
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@Service
-public class DownloadOptionsFormatter {
+public class DownloadOptionsCardFormatter {
 
     private static final Set<String> AUDIO_EXTENSIONS = Set.of(
             "flac", "mp3", "wav", "m4a", "aac", "alac", "aiff", "ogg", "wma", "ape"
     );
 
-    public String format(List<DownloadFlowHandler.OptionReport> reports, String aiSummary) {
+    public static String format(List<DownloadFlowHandler.OptionReport> reports, String aiSummary) {
         if (reports.isEmpty()) {
             return "😔 **на жаль, нич.**";
         }
@@ -57,7 +55,7 @@ public class DownloadOptionsFormatter {
         return sb.toString();
     }
 
-    private String detectFormat(DownloadOption opt) {
+    private static String detectFormat(DownloadOption opt) {
         return opt.files().stream()
                 .map(f -> getExtension(f.filename()))
                 .filter(ext -> AUDIO_EXTENSIONS.contains(ext.toLowerCase()))
@@ -71,7 +69,7 @@ public class DownloadOptionsFormatter {
                 .orElse("кака");
     }
 
-    private String getExtension(String filename) {
+    private static String getExtension(String filename) {
         int lastDot = filename.lastIndexOf('.');
         if (lastDot > 0 && lastDot < filename.length() - 1) {
             return filename.substring(lastDot + 1);
@@ -79,7 +77,7 @@ public class DownloadOptionsFormatter {
         return "";
     }
 
-    private String getIndexIcon(int index) {
+    private static String getIndexIcon(int index) {
         return switch (index) {
             case 1 -> "1️⃣";
             case 2 -> "2️⃣";

@@ -19,6 +19,6 @@ public class SearchFilesResultListener {
     @KafkaListener(topics = "file-search-results", groupId = "main-agent-group")
     public void handleSearchResults(SearchFilesResultDto dto) {
         var response = musicDownloadFlowService.handleSearchResults(dto);
-        telegramBot.sendResponse(dto.chatId(), response);
+        response.forEach(res -> telegramBot.sendResponse(dto.chatId(), res));
     }
 }

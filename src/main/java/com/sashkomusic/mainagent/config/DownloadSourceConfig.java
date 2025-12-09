@@ -1,6 +1,8 @@
 package com.sashkomusic.mainagent.config;
 
 import com.sashkomusic.mainagent.domain.model.DownloadEngine;
+import com.sashkomusic.mainagent.domain.service.download.AppleMusicDownloadFlowHandler;
+import com.sashkomusic.mainagent.domain.service.download.BandcampDownloadFlowHandler;
 import com.sashkomusic.mainagent.domain.service.download.DownloadFlowHandler;
 import com.sashkomusic.mainagent.domain.service.download.QobuzDownloadFlowHandler;
 import com.sashkomusic.mainagent.domain.service.download.SoulseekDownloadFlowHandler;
@@ -15,11 +17,15 @@ public class DownloadSourceConfig {
     @Bean
     public Map<DownloadEngine, DownloadFlowHandler> downloadFlowHandlers(
             QobuzDownloadFlowHandler qobuzHandler,
-            SoulseekDownloadFlowHandler soulseekHandler
+            SoulseekDownloadFlowHandler soulseekHandler,
+            AppleMusicDownloadFlowHandler appleMusicHandler,
+            BandcampDownloadFlowHandler bandcampHandler
     ) {
         return Map.of(
                 DownloadEngine.QOBUZ, qobuzHandler,
-                DownloadEngine.SOULSEEK, soulseekHandler
+                DownloadEngine.SOULSEEK, soulseekHandler,
+                DownloadEngine.APPLE_MUSIC, appleMusicHandler,
+                DownloadEngine.BANDCAMP, bandcampHandler
         );
     }
 }

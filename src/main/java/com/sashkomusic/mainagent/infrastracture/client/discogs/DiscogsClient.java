@@ -40,7 +40,9 @@ public class DiscogsClient implements SearchEngineService {
             var response = client.get()
                     .uri(uriBuilder -> {
                         addDiscogsParameters(uriBuilder, request);
-                        return uriBuilder.build();
+                        var uri = uriBuilder.build();
+                        log.info("Discogs request URL: {}", uri);
+                        return uri;
                     })
                     .retrieve()
                     .body(DiscogsSearchResponse.class);

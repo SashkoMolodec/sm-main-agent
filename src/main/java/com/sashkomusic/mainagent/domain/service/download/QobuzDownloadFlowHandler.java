@@ -5,10 +5,7 @@ import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 import org.springframework.stereotype.Component;
 
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Component
 public class QobuzDownloadFlowHandler implements DownloadFlowHandler {
@@ -36,13 +33,10 @@ public class QobuzDownloadFlowHandler implements DownloadFlowHandler {
     }
 
     @Override
-    public boolean shouldAutoDownload(List<OptionReport> reports) {
-        return reports.size() == 1;
-    }
-
-    @Override
     public BotResponse buildSearchResultsResponse(String formattedText, String releaseId, DownloadEngine currentSource) {
         var buttons = new LinkedHashMap<String, String>();
+        buttons.put("🍏", "SEARCH_ALT:" + releaseId + ":APPLE_MUSIC");
+        buttons.put("📼", "SEARCH_ALT:" + releaseId + ":BANDCAMP");
         buttons.put("⛏️", "SEARCH_ALT:" + releaseId + ":SOULSEEK");
         return BotResponse.withButtons(formattedText, buttons);
     }
@@ -50,6 +44,11 @@ public class QobuzDownloadFlowHandler implements DownloadFlowHandler {
     @Override
     public String formatDownloadConfirmation(DownloadOption option) {
         return "✅ **ок, качаю:**\n%s".formatted(option.displayName());
+    }
+
+    @Override
+    public Optional<DownloadEngine> getFallbackDownloadEngine() {
+        return Optional.of(DownloadEngine.SOULSEEK);
     }
 
     private int getQualityPriority(OptionReport report) {
