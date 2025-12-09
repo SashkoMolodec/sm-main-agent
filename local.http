@@ -16,29 +16,14 @@ Content-Type: application/json
 
 ###
 GET http://localhost:5030/api/v0/application
-X-API-KEY: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
-
+#X-API-KEY:
 ###
 
 # curl http://localhost:5030/health
 GET http://localhost:5030/health
 
-# curl -X POST http://localhost:5030/api/v0/searches
-#  -H "Content-Type: application/json"
-#  -H "X-API-Key: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi"
-#  -d '{
-#    "searchText": "Introversion Laika",
-#    "filterResponses": true,
-#    "maximumPeerQueueLength": 1000000,
-#    "minimumPeerUploadSpeed": 0,
-#    "minimumResponseFileCount": 1,
-#    "responseLimit": 100,
-#    "searchTimeout": 15000
-#  }'
-###
-
 POST http://localhost:5030/api/v0/searches
-X-API-Key: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
+#X-API-Key:
 Content-Type: application/json
 
 {
@@ -55,13 +40,11 @@ Content-Type: application/json
 
 # curl -X GET "http://localhost:5030/api/v0/searches/$SEARCH_ID"
 GET http://localhost:5030/api/v0/searches/0297101d-3cc2-4157-835f-26dbcea86c3e/responses
-X-API-Key: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
-
+#X-API-Key:
 ###
 
 GET http://localhost:5030/api/v0/searches/7350e2e5-b4b1-470e-924b-65c61c6d5edd/responses
-X-API-KEY: ApzMmT1nlhMzLEqLjTT36RJZwu94/JnnztXL+RSX6oj1+LfmGNXuiF511efGUkpi
-
+#X-API-KEY:
 ###
 
 # curl -X POST http://localhost:8080/webhooks/slskd/search-complete
@@ -106,7 +89,7 @@ GET https://musicbrainz.org/ws/2/release/?query=artist:nthng AND release:Hypnoth
 GET https://musicbrainz.org/ws/2/release/?query=/release?query=artist:"A$AP Rocky" AND release:"Testing"&fmt=json
 
 ###
-GET https://musicbrainz.org/ws/2/release?query=artist:"A$AP Rocky" AND release:"Testing"&fmt=json
+GET https://musicbrainz.org/ws/2/release?query=artist:"паліндром"&fmt=json
 
 
 ###
@@ -117,8 +100,105 @@ GET https://musicbrainz.org/ws/2/release?query=artist:"jeff mills" AND release:"
 
 
 ###
-GET https://musicbrainz.org/ws/2/release?query=artist:"Jeff Mills" AND date:[2020 TO 2025]&fmt=json&limit=100&offset=0
+GET https://musicbrainz.org/ws/2/release?query=artist:"Jeff Mills" AND date:[1990 TO 1999]&fmt=json&limit=100&offset=0
 
 
 ###
-GET https://musicbrainz.org/ws/2/release?query=recording:"Simulant"&fmt=json
+GET https://musicbrainz.org/ws/2/release?query=artist:"Guns n roses" AND release:"appetite for destruction" AND date:1987&fmt=json&limit=100
+
+###
+# Get all releases by release-group ID
+GET https://musicbrainz.org/ws/2/release?release-group=e121a9c8-ceaa-3961-989e-c580dba58548&fmt=json&limit=100
+
+###
+# Get release-group details with all releases included
+GET https://musicbrainz.org/ws/2/release/adfaea6d-ad59-4a8e-ad6f-3845f56110fa?fmt=json&inc=recordings+artist-credits
+
+###
+# ============= DISCOGS API =============
+# Note: Add your Discogs token to environment variable DISCOGS_API_TOKEN
+# Or replace {{DISCOGS_TOKEN}} with your actual token
+# Get token from: https://www.discogs.com/settings/developers
+
+
+###
+@DISCOGS_TOKEN = LnBzoOZIWyyJuXKtFSxdbunLyOtpepOfaYfiIUpT
+
+# Simple search - The Shady Project
+GET https://api.discogs.com/database/search?q=паліндром&type=master,release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search by artist name - The Shady Project
+GET https://api.discogs.com/database/search?artist=The Shady Project&type=master,release&per_page=100&token={{DISCOGS_TOKEN}}
+
+###
+# Search with artist and release title
+GET https://api.discogs.com/database/search?artist=The Shady Project&release_title=Hypnotherapy&type=master,release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search with artist and year
+GET https://api.discogs.com/database/search?artist=Jeff Mills&year=1996&type=master,release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search by catalog number
+GET https://api.discogs.com/database/search?catno=AX-009&type=release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search with format filter (Vinyl)
+GET https://api.discogs.com/database/search?artist=Daft Punk&format=Vinyl&type=master,release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search with label
+GET https://api.discogs.com/database/search?label=Axis Records&type=release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search with style/genre
+GET https://api.discogs.com/database/search?artist=Aphex Twin&style=Ambient&type=master,release&per_page=25&token={{DISCOGS_TOKEN}}
+###
+# Complex search - multiple filters
+GET https://api.discogs.com/database/search?artist=Jeff Mills&year=1996&format=Vinyl&label=Axis&type=release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search with country filter
+GET https://api.discogs.com/database/search?artist=Daft Punk&country=Japan&type=release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+# Search for ukrainian artist - Паліндром
+GET https://api.discogs.com/database/search?artist=Паліндром&type=master,release&per_page=200&token={{DISCOGS_TOKEN}}
+
+###
+# Search for nthng
+GET https://api.discogs.com/database/search?artist=nthng&type=master,release&per_page=50&token={{DISCOGS_TOKEN}}
+
+###
+https://api.discogs.com/database/search?type=master,release&per_page=50&artist=Queen&release_title=Hot%20Space&token=LnBzoOZIWyyJuXKtFSxdbunLyOtpepOfaYfiIUpT
+
+###
+
+# Search for nthng
+GET https://api.discogs.com/releases/24898118?token={{DISCOGS_TOKEN}}
+
+###
+
+GET https://api.song.link/v1-alpha.1/links?url=https://www.youtube.com/watch?v=bKvVXF5riQU&list=OLAK5uy_ldz14l24sCIyBV4mXaeVzcdYaxJSLnf7g&index=2
+
+###
+
+GET https://api.song.link/v1-alpha.1/links?url=https://www.youtube.com/watch?v=bKvVXF5riQU&list=OLAK5uy_ldz14l24sCIyBV4mXaeVzcdYaxJSLnf7g&index=2
+
+###
+
+GET https://api.song.link/v1-alpha.1/links?url=https://www.youtube.com/watch?v=jHmBxqLhD40&list=RDjHmBxqLhD40&start_radio=1
+
+###
+
+POST https://api.song.link/v1-alpha.1/songlink
+
+{
+  "album_name": "laika",
+  "artist_name": "introversion"
+}
+
+###
+
+https://api.discogs.com/database/search?type=master,release&per_page=200&track=%D0%A2%D0%B8%D1%85%D0%BE+%D0%A1%D0%BE%D0%BD%D0%B5%D1%87%D0%BA%D0%BE&token=LnBzoOZIWyyJuXKtFSxdbunLyOtpepOfaYfiIUpT
