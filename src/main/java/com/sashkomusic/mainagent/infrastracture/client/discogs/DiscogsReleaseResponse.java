@@ -11,7 +11,13 @@ public record DiscogsReleaseResponse(
         String title,
         List<Artist> artists,
         List<Track> tracklist,
-        @JsonProperty("main_release") Long mainRelease
+        @JsonProperty("main_release") Long mainRelease,
+        Integer year,
+        List<String> genres,
+        List<String> styles,
+        List<Format> formats,
+        List<Label> labels,
+        List<Image> images
 ) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Artist(
@@ -26,6 +32,32 @@ public record DiscogsReleaseResponse(
             String title,
             String duration,
             List<Artist> artists
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Format(
+            String name,
+            String qty,
+            List<String> descriptions
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Label(
+            String name,
+            String catno
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Image(
+            String type,
+            String uri,
+            @JsonProperty("resource_url") String resourceUrl,
+            String uri150,
+            Integer width,
+            Integer height
     ) {
     }
 }

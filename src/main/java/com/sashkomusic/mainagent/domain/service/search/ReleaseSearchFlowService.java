@@ -43,7 +43,7 @@ public class ReleaseSearchFlowService {
     }
 
     public List<BotResponse> switchStrategyAndSearch(long chatId) {
-        SearchEngine currentEngine = contextService.getSearchEngine(chatId);
+        SearchEngine currentEngine = contextService.getSource(chatId);
         String rawInput = contextService.getRawInput(chatId);
 
         if (currentEngine == SearchEngine.MUSICBRAINZ) {
@@ -55,7 +55,7 @@ public class ReleaseSearchFlowService {
         }
     }
 
-    public SearchResult searchWithFallback(String query, SearchEngine... engines) {
+    public SearchResult searchWithFallback(String query,SearchEngine... engines) {
         var searchRequest = analyzer.buildSearchRequest(query);
 
         for (SearchEngine engine : engines) {
@@ -85,7 +85,7 @@ public class ReleaseSearchFlowService {
     public List<BotResponse> buildPageResponse(long chatId, int page) {
         var releases = contextService.getSearchResults(chatId);
         var searchRequest = contextService.getSearchRequest(chatId);
-        var searchEngine = contextService.getSearchEngine(chatId);
+        var searchEngine = contextService.getSource(chatId);
         var responses = new ArrayList<BotResponse>();
 
         int start = page * PAGE_SIZE;

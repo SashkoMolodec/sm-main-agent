@@ -44,7 +44,7 @@ public class ProcessFolderFlowService {
     private final ProcessLibraryTaskProducer libraryTaskProducer;
     private final AiService aiService;
 
-    @Value("${slskd.downloads.local-path:/Users/okravch/my/sm/sm-download-agent/slskd/downloads}")
+    @Value("${downloads.base-path:/Users/okravch/my/sm/sm-download-agent/downloads}")
     private String downloadsBasePath;
 
     private static final Set<String> AUDIO_EXTENSIONS = Set.of(
@@ -216,10 +216,10 @@ public class ProcessFolderFlowService {
                                    SearchResults searchResults, Path folderPath, List<String> audioFiles) {
         List<ReleaseMetadata> allResults = searchResults.allResults();
 
-        SearchEngine primaryEngine = !searchResults.mbResults().isEmpty() ? MUSICBRAINZ :
+        SearchEngine primarySource = !searchResults.mbResults().isEmpty() ? MUSICBRAINZ :
                 (!searchResults.discogsResults().isEmpty() ? DISCOGS : BANDCAMP);
 
-        searchContextService.saveSearchContext(chatId, primaryEngine, folderName, searchRequest, allResults);
+        searchContextService.saveSearchContext(chatId, primarySource, folderName, searchRequest, allResults);
         storeSearchResults(chatId, allResults);
         storeChatContext(chatId, folderPath, audioFiles);
     }
@@ -415,6 +415,25 @@ public class ProcessFolderFlowService {
     }
 
     private String extractFolderName(String rawInput) {
-        return rawInput.substring("/process ".length()).trim();
+        String folderName = rawInput.substring("/process ".length()).trim();
+        return stripQuotes(folderName);
+    }
+
+    private static String stripQuotes(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+
+        String trimmed = path.trim();
+
+        if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length() > 1) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+
+        if (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length() > 1) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+
+        return trimmed;
     }
 }

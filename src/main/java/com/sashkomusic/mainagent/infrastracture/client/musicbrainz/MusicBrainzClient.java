@@ -2,7 +2,8 @@ package com.sashkomusic.mainagent.infrastracture.client.musicbrainz;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadataFile;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
@@ -316,7 +317,7 @@ public class MusicBrainzClient implements SearchEngineService {
         return new ReleaseMetadata(
                 representative.id(),
                 representative.releaseGroup().id(),
-                Source.MUSICBRAINZ,
+                SearchEngine.MUSICBRAINZ,
                 cleanArtist,
                 cleanTitle,
                 representative.score(),
@@ -375,6 +376,85 @@ public class MusicBrainzClient implements SearchEngineService {
             return date.substring(0, 4);
         }
         return "N/A";
+    }
+
+    @Retryable(
+            maxAttempts = 3,
+            backoff = @Backoff(
+                    delay = 2000,      // 2 seconds
+                    multiplier = 2.0,  // exponential backoff
+                    maxDelay = 10000   // max 10 seconds
+            )
+    )
+    public ReleaseMetadata getReleaseById(String releaseId) {
+        log.info("Fetching release metadata for ID: {}", releaseId);
+
+        try {
+            var release = client.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/release/{id}")
+                            .queryParam("inc", "release-groups+tags+labels+recordings+artist-credits")
+                            .queryParam("fmt", "json")
+                            .build(releaseId))
+                    .retrieve()
+                    .body(MusicBrainzSearchResponse.Release.class);
+
+            if (release == null) {
+                log.warn("Release not found: {}", releaseId);
+                return null;
+            }
+
+            List<String> years = List.of(extractYear(release.date()));
+            List<String> types = release.releaseGroup() != null && release.releaseGroup().primaryType() != null
+                    ? List.of(release.releaseGroup().primaryType())
+                    : List.of();
+
+            List<String> tags = release.tags() != null
+                    ? release.tags().stream()
+                    .sorted(Comparator.comparingInt(MusicBrainzSearchResponse.Tag::count).reversed())
+                    .map(t -> t.name().toLowerCase())
+                    .distinct()
+                    .toList()
+                    : List.of();
+
+            String coverUrl = getCoverUrl(release);
+            String cleanArtist = clean(getArtistName(release));
+            String cleanTitle = clean(release.title());
+
+            String label = release.labelInfo() != null && !release.labelInfo().isEmpty()
+                    ? release.labelInfo().stream()
+                    .filter(li -> li.label() != null && li.label().name() != null)
+                    .map(li -> li.label().name())
+                    .findFirst()
+                    .orElse("")
+                    : "";
+
+            int trackCount = getTrackCount(release);
+
+            List<TrackMetadata> tracks = getTracks(releaseId);
+
+            return new ReleaseMetadata(
+                    release.id(),
+                    release.releaseGroup() != null ? release.releaseGroup().id() : null,
+                    SearchEngine.MUSICBRAINZ,
+                    cleanArtist,
+                    cleanTitle,
+                    100, // No score for direct fetch
+                    years,
+                    types,
+                    trackCount,
+                    trackCount,
+                    1,
+                    tracks,
+                    coverUrl,
+                    tags,
+                    label
+            );
+
+        } catch (Exception ex) {
+            log.error("Error fetching release metadata (will retry): {}", ex.getMessage());
+            throw ex;
+        }
     }
 
     @Override
@@ -444,11 +524,23 @@ public class MusicBrainzClient implements SearchEngineService {
     }
 
     @Override
+    public SearchEngine getSource() {
+        return SearchEngine.MUSICBRAINZ;
+    }
+
+    @Override
     public String buildReleaseUrl(ReleaseMetadata release) {
         // Use release group ID (masterId) if available, otherwise release ID
         String id = release.masterId() != null ? release.masterId() : release.id();
         String type = release.masterId() != null ? "release-group" : "release";
         return "https://musicbrainz.org/" + type + "/" + id;
+    }
+
+    @Override
+    public ReleaseMetadata getReleaseMetadata(ReleaseMetadataFile metadataFile) {
+        log.info("Refreshing metadata from MusicBrainz for: {} - {}",
+                metadataFile.artist(), metadataFile.title());
+        return getReleaseById(metadataFile.sourceId());
     }
 
     private String clean(String text) {

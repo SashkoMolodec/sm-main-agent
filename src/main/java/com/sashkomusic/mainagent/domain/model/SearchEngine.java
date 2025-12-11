@@ -1,16 +1,11 @@
 package com.sashkomusic.mainagent.domain.model;
 
-import lombok.Getter;
-
-@Getter
 public enum SearchEngine {
-    MUSICBRAINZ("musicbrainz"),
-    DISCOGS("discogs"),
-    BANDCAMP("bandcamp");
+    MUSICBRAINZ,
+    DISCOGS,
+    BANDCAMP;
 
-    public final String name;
-
-    SearchEngine(String name) {
-        this.name = name;
+    public String getName() {
+        return name().toLowerCase();
     }
 }

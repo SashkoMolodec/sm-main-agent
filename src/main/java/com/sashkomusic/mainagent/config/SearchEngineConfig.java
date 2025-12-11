@@ -16,7 +16,7 @@ public class SearchEngineConfig {
     public Map<SearchEngine, SearchEngineService> searchEngines(List<SearchEngineService> services) {
         return services.stream()
                 .collect(Collectors.toMap(
-                        service -> SearchEngine.valueOf(service.getName().toUpperCase()),
+                        SearchEngineService::getSource,
                         service -> service
                 ));
     }

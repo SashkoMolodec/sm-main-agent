@@ -2,7 +2,8 @@ package com.sashkomusic.mainagent.infrastracture.client.bandcamp;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadataFile;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
@@ -349,7 +350,7 @@ public class BandcampClient implements SearchEngineService {
         return new ReleaseMetadata(
                 releaseId,
                 url, // Store full URL in masterId field for later retrieval
-                Source.BANDCAMP,
+                SearchEngine.BANDCAMP,
                 artist,
                 title,
                 80, // Default score for Bandcamp results (lower than Discogs/MusicBrainz)
@@ -363,6 +364,198 @@ public class BandcampClient implements SearchEngineService {
                 tags,
                 "" // Label not available from Bandcamp
         );
+    }
+
+    /**
+     * Get release metadata by URL.
+     * Used for reprocessing - fetches fresh metadata from a known Bandcamp URL.
+     */
+    public ReleaseMetadata getReleaseByUrl(String url) {
+        log.info("Fetching release metadata from Bandcamp URL: {}", url);
+
+        try {
+            // Fetch release page HTML
+            String html = client.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(String.class);
+
+            if (html == null || html.isEmpty()) {
+                throw new RuntimeException("Empty response from Bandcamp URL: " + url);
+            }
+
+            Document doc = Jsoup.parse(html);
+
+            // Extract metadata from page
+            String artist = extractArtistFromPage(doc);
+            String title = extractTitleFromPage(doc);
+            String year = extractYearFromPage(doc);
+            String imageUrl = extractImageFromPage(doc);
+            List<String> tags = extractTagsFromPage(doc);
+            String type = extractTypeFromPage(doc);
+            int trackCount = extractTrackCount(doc);
+
+            // Clean special characters
+            artist = clean(artist);
+            title = clean(title);
+
+            // Create release ID using URL hash
+            String releaseId = "bandcamp:" + Integer.toHexString(url.hashCode());
+
+            log.info("Extracted metadata: {} - {} ({})", artist, title, year);
+
+            return new ReleaseMetadata(
+                    releaseId,
+                    url, // Store full URL in masterId
+                    SearchEngine.BANDCAMP,
+                    artist,
+                    title,
+                    80,
+                    year.isEmpty() ? List.of() : List.of(year),
+                    List.of(type),
+                    trackCount,
+                    0,
+                    1,
+                    List.of(),
+                    imageUrl,
+                    tags,
+                    ""
+            );
+
+        } catch (Exception ex) {
+            log.error("Error fetching release from Bandcamp URL {}: {}", url, ex.getMessage());
+            throw new RuntimeException("Failed to fetch Bandcamp release: " + ex.getMessage(), ex);
+        }
+    }
+
+    private String extractArtistFromPage(Document doc) {
+        // Try meta tag first
+        Element metaArtist = doc.selectFirst("meta[property=og:site_name]");
+        if (metaArtist != null) {
+            String artist = metaArtist.attr("content");
+            if (!artist.isEmpty()) {
+                return artist;
+            }
+        }
+
+        // Try span with itemprop
+        Element artistSpan = doc.selectFirst("span[itemprop=byArtist]");
+        if (artistSpan != null) {
+            return artistSpan.text().trim();
+        }
+
+        // Try band name link
+        Element bandLink = doc.selectFirst("p#band-name-location span.title");
+        if (bandLink != null) {
+            return bandLink.text().trim();
+        }
+
+        return "Unknown Artist";
+    }
+
+    private String extractTitleFromPage(Document doc) {
+        // Try meta tag
+        Element metaTitle = doc.selectFirst("meta[property=og:title]");
+        if (metaTitle != null) {
+            String title = metaTitle.attr("content");
+            if (!title.isEmpty()) {
+                return title;
+            }
+        }
+
+        // Try h2.trackTitle
+        Element titleElement = doc.selectFirst("h2.trackTitle");
+        if (titleElement != null) {
+            return titleElement.text().trim();
+        }
+
+        return "Unknown Title";
+    }
+
+    private String extractYearFromPage(Document doc) {
+        // Try meta datePublished
+        Element metaDate = doc.selectFirst("meta[itemprop=datePublished]");
+        if (metaDate != null) {
+            String datePublished = metaDate.attr("content"); // Format: "20231031"
+            if (datePublished.length() >= 4) {
+                return datePublished.substring(0, 4);
+            }
+        }
+
+        // Try .tralbumData script (JSON)
+        Element tralbumScript = doc.selectFirst("script[data-tralbum]");
+        if (tralbumScript != null) {
+            String json = tralbumScript.attr("data-tralbum");
+            // Look for "release_date" field
+            if (json.contains("\"release_date\"")) {
+                try {
+                    int startIdx = json.indexOf("\"release_date\":") + 15;
+                    String dateStr = json.substring(startIdx, startIdx + 10).replaceAll("[^0-9]", "");
+                    if (dateStr.length() >= 4) {
+                        return dateStr.substring(0, 4);
+                    }
+                } catch (Exception e) {
+                    log.debug("Failed to parse release_date from JSON");
+                }
+            }
+        }
+
+        return "";
+    }
+
+    private String extractImageFromPage(Document doc) {
+        // Try meta og:image
+        Element metaImage = doc.selectFirst("meta[property=og:image]");
+        if (metaImage != null) {
+            String imageUrl = metaImage.attr("content");
+            if (!imageUrl.isEmpty()) {
+                return imageUrl;
+            }
+        }
+
+        // Try #tralbumArt img
+        Element artImg = doc.selectFirst("#tralbumArt img");
+        if (artImg != null) {
+            return artImg.attr("src");
+        }
+
+        return "";
+    }
+
+    private List<String> extractTagsFromPage(Document doc) {
+        List<String> tags = new ArrayList<>();
+
+        // Tags are in .tralbumData script or in tags section
+        var tagLinks = doc.select("a.tag");
+        for (Element tagLink : tagLinks) {
+            String tag = tagLink.text().trim().toLowerCase();
+            if (!tag.isEmpty()) {
+                tags.add(tag);
+            }
+        }
+
+        return tags;
+    }
+
+    private String extractTypeFromPage(Document doc) {
+        // Check if it's an album or track
+        Element trackList = doc.selectFirst("table.track_list");
+        if (trackList != null) {
+            var trackRows = trackList.select("tr.track_row_view");
+            if (trackRows.size() > 1) {
+                return "Album";
+            }
+        }
+        return "Track";
+    }
+
+    private int extractTrackCount(Document doc) {
+        Element trackList = doc.selectFirst("table.track_list");
+        if (trackList != null) {
+            var trackRows = trackList.select("tr.track_row_view");
+            return trackRows.size();
+        }
+        return 0;
     }
 
     @Override
@@ -443,9 +636,28 @@ public class BandcampClient implements SearchEngineService {
     }
 
     @Override
+    public SearchEngine getSource() {
+        return SearchEngine.BANDCAMP;
+    }
+
+    @Override
     public String buildReleaseUrl(ReleaseMetadata release) {
         // Bandcamp URL is stored in masterId field
         return release.masterId();
+    }
+
+    @Override
+    public ReleaseMetadata getReleaseMetadata(ReleaseMetadataFile metadataFile) {
+        log.info("Refreshing metadata from Bandcamp for: {} - {}",
+                metadataFile.artist(), metadataFile.title());
+
+        // For Bandcamp, masterId contains the full URL to the release page
+        String url = metadataFile.masterId();
+        if (url == null || url.isEmpty()) {
+            throw new IllegalArgumentException("Bandcamp URL (masterId) is missing from metadata file");
+        }
+
+        return getReleaseByUrl(url);
     }
 
     private String clean(String text) {

@@ -2,11 +2,14 @@ package com.sashkomusic.mainagent.infrastracture.client.discogs;
 
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
-import com.sashkomusic.mainagent.domain.model.Source;
+import com.sashkomusic.mainagent.domain.model.ReleaseMetadataFile;
+import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriBuilder;
@@ -199,7 +202,7 @@ public class DiscogsClient implements SearchEngineService {
         return new ReleaseMetadata(
                 releaseId,
                 masterId,
-                Source.DISCOGS,
+                SearchEngine.DISCOGS,
                 artist,
                 title,
                 100, // Default score for Discogs results
@@ -238,6 +241,141 @@ public class DiscogsClient implements SearchEngineService {
             return text;
         }
         return text.replaceAll("[*?\\[\\]{}|<>\"'`]", "").trim();
+    }
+
+    @Retryable(
+            maxAttempts = 3,
+            backoff = @Backoff(
+                    delay = 2000,      // 2 seconds
+                    multiplier = 2.0,  // exponential backoff
+                    maxDelay = 10000   // max 10 seconds
+            )
+    )
+    public ReleaseMetadata getReleaseById(String releaseId) {
+        log.info("Fetching release metadata from Discogs for ID: {}", releaseId);
+
+        // Parse releaseId format: "discogs:master:123" or "discogs:release:456"
+        if (!releaseId.startsWith("discogs:")) {
+            log.warn("Invalid Discogs release ID format: {}", releaseId);
+            return null;
+        }
+
+        String[] parts = releaseId.split(":");
+        if (parts.length != 3) {
+            log.warn("Invalid Discogs release ID format: {}", releaseId);
+            return null;
+        }
+
+        String type = parts[1]; // "master" or "release"
+        String id = parts[2];   // actual ID
+
+        try {
+            DiscogsReleaseResponse response;
+
+            // Fetch from appropriate endpoint
+            if ("master".equals(type)) {
+                response = client.get()
+                        .uri(uriBuilder -> {
+                            uriBuilder.path("/masters/" + id);
+                            if (!apiToken.isEmpty()) {
+                                uriBuilder.queryParam("token", apiToken);
+                            }
+                            return uriBuilder.build();
+                        })
+                        .retrieve()
+                        .body(DiscogsReleaseResponse.class);
+            } else {
+                response = client.get()
+                        .uri(uriBuilder -> {
+                            uriBuilder.path("/releases/" + id);
+                            if (!apiToken.isEmpty()) {
+                                uriBuilder.queryParam("token", apiToken);
+                            }
+                            return uriBuilder.build();
+                        })
+                        .retrieve()
+                        .body(DiscogsReleaseResponse.class);
+            }
+
+            if (response == null) {
+                log.warn("Release not found: {}", releaseId);
+                return null;
+            }
+
+            String artist = response.artists() != null && !response.artists().isEmpty()
+                    ? cleanArtistName(response.artists().getFirst().name())
+                    : "Unknown";
+            String title = response.title() != null ? clean(response.title()) : "Unknown";
+
+            List<TrackMetadata> tracks = getTracks(releaseId);
+
+            List<String> years = response.year() != null
+                    ? List.of(String.valueOf(response.year()))
+                    : List.of();
+
+            List<String> types = new java.util.ArrayList<>();
+            if (response.formats() != null && !response.formats().isEmpty()) {
+                response.formats().forEach(format -> {
+                    if (format.name() != null) {
+                        types.add(format.name());
+                    }
+                    if (format.descriptions() != null) {
+                        types.addAll(format.descriptions());
+                    }
+                });
+            }
+
+            // Combine genres and styles for tags
+            List<String> tags = new java.util.ArrayList<>();
+            if (response.genres() != null) {
+                tags.addAll(response.genres().stream().map(String::toLowerCase).toList());
+            }
+            if (response.styles() != null) {
+                tags.addAll(response.styles().stream().map(String::toLowerCase).toList());
+            }
+
+            String label = "";
+            if (response.labels() != null && !response.labels().isEmpty()) {
+                DiscogsReleaseResponse.Label firstLabel = response.labels().getFirst();
+                label = firstLabel != null && firstLabel.name() != null ? firstLabel.name() : "";
+            }
+
+            String coverUrl = null;
+            if (response.images() != null && !response.images().isEmpty()) {
+                var primaryImage = response.images().stream()
+                        .filter(img -> img != null && "primary".equals(img.type()))
+                        .findFirst();
+
+                if (primaryImage.isPresent()) {
+                    coverUrl = primaryImage.get().uri();
+                } else if (!response.images().isEmpty()) {
+                    DiscogsReleaseResponse.Image firstImage = response.images().getFirst();
+                    coverUrl = firstImage != null ? firstImage.uri() : null;
+                }
+            }
+
+            return new ReleaseMetadata(
+                    releaseId,
+                    type.equals("master") ? id : null,
+                    SearchEngine.DISCOGS,
+                    artist,
+                    title,
+                    100,
+                    years,
+                    types,
+                    tracks.size(),
+                    tracks.size(),
+                    1,
+                    tracks,
+                    coverUrl,
+                    tags,
+                    label
+            );
+
+        } catch (Exception ex) {
+            log.error("Error fetching release metadata from Discogs (will retry): {}", ex.getMessage());
+            throw ex; // Let @Retryable handle it
+        }
     }
 
     @Override
@@ -392,6 +530,11 @@ public class DiscogsClient implements SearchEngineService {
     }
 
     @Override
+    public SearchEngine getSource() {
+        return SearchEngine.DISCOGS;
+    }
+
+    @Override
     public String buildReleaseUrl(ReleaseMetadata release) {
         // Parse "discogs:master:123" or "discogs:release:456"
         if (release.id().startsWith("discogs:master:")) {
@@ -402,5 +545,17 @@ public class DiscogsClient implements SearchEngineService {
             return "https://www.discogs.com/release/" + releaseId;
         }
         return null;
+    }
+
+    @Override
+    public ReleaseMetadata getReleaseMetadata(ReleaseMetadataFile metadataFile) {
+        log.info("Refreshing metadata from Discogs for: {} - {}",
+                metadataFile.artist(), metadataFile.title());
+
+        String releaseId = metadataFile.masterId() != null
+                ? metadataFile.masterId()
+                : metadataFile.sourceId();
+
+        return getReleaseById(releaseId);
     }
 }

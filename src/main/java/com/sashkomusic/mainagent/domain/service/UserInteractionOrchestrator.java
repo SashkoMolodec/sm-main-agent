@@ -5,6 +5,7 @@ import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.UserIntent;
 import com.sashkomusic.mainagent.domain.service.download.MusicDownloadFlowService;
 import com.sashkomusic.mainagent.domain.service.process.ProcessFolderFlowService;
+import com.sashkomusic.mainagent.domain.service.process.ReprocessReleasesFlowService;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import com.sashkomusic.mainagent.domain.service.streaming.StreamingFlowService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class UserInteractionOrchestrator {
     private final ReleaseSearchFlowService releaseSearchFlowService;
     private final ProcessFolderFlowService processFolderFlowService;
     private final StreamingFlowService streamingFlowService;
+    private final ReprocessReleasesFlowService reprocessReleasesFlowService;
 
     public List<BotResponse> handleUserRequest(long chatId, String rawInput) {
         var res = processUserCommands(chatId, rawInput);
@@ -66,6 +68,11 @@ public class UserInteractionOrchestrator {
     private List<BotResponse> processUserCommands(long chatId, String rawInput) {
         if (rawInput.startsWith("/process")) {
             return processFolderFlowService.handleProcessCommand(chatId, rawInput);
+        }
+
+        if (rawInput.startsWith("/reprocess")) {
+            ReprocessReleasesFlowService.ReprocessResult result = reprocessReleasesFlowService.handle(chatId, rawInput);
+            return List.of(BotResponse.text(result.message()));
         }
 
         if (processFolderFlowService.hasActiveContext(chatId)) {

@@ -63,9 +63,9 @@ public class SearchContextService {
         return userSearches.get(chatId).request();
     }
 
-    public SearchEngine getSearchEngine(long chatId) {
+    public SearchEngine getSource(long chatId) {
         validateSession(chatId);
-        return userSearches.get(chatId).searchEngine();
+        return userSearches.get(chatId).source();
     }
 
     public String getRawInput(long chatId) {
@@ -88,8 +88,8 @@ public class SearchContextService {
         log.info("Fetching tracks for releaseId={}, source={}", releaseId, metadata.source());
 
         try {
-            SearchEngine searchEngine = getSearchEngine(chatId);
-            SearchEngineService engine = searchEngines.get(searchEngine);
+            SearchEngine source = getSource(chatId);
+            SearchEngineService engine = searchEngines.get(source);
 
             List<TrackMetadata> tracks = engine.getTracks(releaseId);
 
@@ -99,7 +99,7 @@ public class SearchContextService {
                 log.info("Successfully fetched {} tracks for releaseId={}", tracks.size(), releaseId);
                 return enriched;
             } else {
-                log.warn("No tracks returned from {} for releaseId={}", searchEngine, releaseId);
+                log.warn("No tracks returned from {} for releaseId={}", source, releaseId);
                 return metadata;
             }
         } catch (Exception e) {
