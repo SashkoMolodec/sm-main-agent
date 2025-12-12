@@ -453,47 +453,51 @@ public class DiscogsClient implements SearchEngineService {
         // Get album artist from response
         String albumArtist = extractArtistName(response);
 
-        // Build TrackMetadata with position numbers
-        return response.tracklist().stream()
-                .map(track -> {
-                    int trackNumber = parseTrackPosition(track.position());
-                    String trackTitle = track.title();
-                    String trackArtist = albumArtist; // Default to album artist
+        // Build TrackMetadata with sequential track numbers (1, 2, 3, ...)
+        // Don't use Discogs position field as it may use vinyl notation (A1, A2, B1, B2)
+        List<TrackMetadata> tracks = new ArrayList<>();
+        int trackNumber = 1;
 
-                    // Priority 1: Use track's artists field from Discogs API (most accurate)
-                    if (track.artists() != null && !track.artists().isEmpty()) {
-                        // Combine multiple artists using their 'join' field (e.g., "HATELOVE & Wanton")
-                        StringBuilder artistBuilder = new StringBuilder();
-                        for (int i = 0; i < track.artists().size(); i++) {
-                            var artist = track.artists().get(i);
-                            artistBuilder.append(cleanArtistName(artist.name()));
+        for (var track : response.tracklist()) {
+            String trackTitle = track.title();
+            String trackArtist = albumArtist; // Default to album artist
 
-                            // Add join separator if not the last artist and join is provided
-                            if (i < track.artists().size() - 1 && artist.join() != null && !artist.join().isEmpty()) {
-                                artistBuilder.append(" ").append(artist.join()).append(" ");
-                            }
-                        }
-                        trackArtist = artistBuilder.toString().trim();
-                        log.debug("Using per-track artist from Discogs API: '{}'", trackArtist);
+            // Priority 1: Use track's artists field from Discogs API (most accurate)
+            if (track.artists() != null && !track.artists().isEmpty()) {
+                // Combine multiple artists using their 'join' field (e.g., "HATELOVE & Wanton")
+                StringBuilder artistBuilder = new StringBuilder();
+                for (int i = 0; i < track.artists().size(); i++) {
+                    var artist = track.artists().get(i);
+                    artistBuilder.append(cleanArtistName(artist.name()));
+
+                    // Add join separator if not the last artist and join is provided
+                    if (i < track.artists().size() - 1 && artist.join() != null && !artist.join().isEmpty()) {
+                        artistBuilder.append(" ").append(artist.join()).append(" ");
                     }
-                    // Priority 2: Try to parse from title if format is "Artist - Title"
-                    else if (trackTitle != null && trackTitle.contains(" - ")) {
-                        int dashIndex = trackTitle.indexOf(" - ");
-                        String possibleArtist = trackTitle.substring(0, dashIndex).trim();
-                        String possibleTitle = trackTitle.substring(dashIndex + 3).trim();
+                }
+                trackArtist = artistBuilder.toString().trim();
+                log.debug("Using per-track artist from Discogs API: '{}'", trackArtist);
+            }
+            // Priority 2: Try to parse from title if format is "Artist - Title"
+            else if (trackTitle != null && trackTitle.contains(" - ")) {
+                int dashIndex = trackTitle.indexOf(" - ");
+                String possibleArtist = trackTitle.substring(0, dashIndex).trim();
+                String possibleTitle = trackTitle.substring(dashIndex + 3).trim();
 
-                        // Only split if the artist part looks reasonable (not empty, not too long)
-                        if (!possibleArtist.isEmpty() && possibleArtist.length() < 100 && !possibleTitle.isEmpty()) {
-                            trackArtist = cleanArtistName(possibleArtist);
-                            trackTitle = possibleTitle;
-                            log.debug("Parsed track artist from title: '{}' - '{}'", trackArtist, trackTitle);
-                        }
-                    }
-                    // Priority 3: Fall back to album artist (already set as default)
+                // Only split if the artist part looks reasonable (not empty, not too long)
+                if (!possibleArtist.isEmpty() && possibleArtist.length() < 100 && !possibleTitle.isEmpty()) {
+                    trackArtist = cleanArtistName(possibleArtist);
+                    trackTitle = possibleTitle;
+                    log.debug("Parsed track artist from title: '{}' - '{}'", trackArtist, trackTitle);
+                }
+            }
+            // Priority 3: Fall back to album artist (already set as default)
 
-                    return new TrackMetadata(trackNumber, trackArtist, trackTitle);
-                })
-                .toList();
+            tracks.add(new TrackMetadata(trackNumber, trackArtist, trackTitle));
+            trackNumber++;
+        }
+
+        return tracks;
     }
 
     private String extractArtistName(DiscogsReleaseResponse response) {
@@ -552,10 +556,8 @@ public class DiscogsClient implements SearchEngineService {
         log.info("Refreshing metadata from Discogs for: {} - {}",
                 metadataFile.artist(), metadataFile.title());
 
-        String releaseId = metadataFile.masterId() != null
-                ? metadataFile.masterId()
-                : metadataFile.sourceId();
-
-        return getReleaseById(releaseId);
+        // Always use sourceId which has the full format (discogs:master:123 or discogs:release:456)
+        // masterId is just the numeric part used for display, not for API calls
+        return getReleaseById(metadataFile.sourceId());
     }
 }

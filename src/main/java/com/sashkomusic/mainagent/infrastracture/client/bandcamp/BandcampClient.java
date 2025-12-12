@@ -399,6 +399,9 @@ public class BandcampClient implements SearchEngineService {
             artist = clean(artist);
             title = clean(title);
 
+            // Extract tracks from page
+            List<TrackMetadata> tracks = extractTracksFromPage(doc, artist);
+
             // Create release ID using URL hash
             String releaseId = "bandcamp:" + Integer.toHexString(url.hashCode());
 
@@ -416,7 +419,7 @@ public class BandcampClient implements SearchEngineService {
                     trackCount,
                     0,
                     1,
-                    List.of(),
+                    tracks,
                     imageUrl,
                     tags,
                     ""
@@ -556,6 +559,50 @@ public class BandcampClient implements SearchEngineService {
             return trackRows.size();
         }
         return 0;
+    }
+
+    private List<TrackMetadata> extractTracksFromPage(Document doc, String albumArtist) {
+        var trackRows = doc.select("table.track_list tr.track_row_view");
+        log.info("Found {} track rows in Bandcamp page", trackRows.size());
+
+        List<TrackMetadata> tracks = new ArrayList<>();
+        int trackNumber = 1;
+
+        for (Element row : trackRows) {
+            // Try more specific selector first
+            Element titleElement = row.selectFirst("td.title-col div.title span.track-title");
+            if (titleElement == null) {
+                // Fallback to simpler selector
+                titleElement = row.selectFirst("span.track-title");
+                log.debug("Using fallback selector for track {}", trackNumber);
+            }
+            if (titleElement != null) {
+                String title = titleElement.text().trim();
+                log.info("Extracted track {} title: '{}'", trackNumber, title);
+                if (!title.isEmpty()) {
+                    // Try to parse per-track artist from title if format is "Artist - Title"
+                    String trackArtist = albumArtist;
+                    String trackTitle = title;
+
+                    if (title.contains(" - ")) {
+                        int dashIndex = title.indexOf(" - ");
+                        String possibleArtist = title.substring(0, dashIndex).trim();
+                        String possibleTitle = title.substring(dashIndex + 3).trim();
+
+                        // Only split if the artist part looks reasonable
+                        if (!possibleArtist.isEmpty() && possibleArtist.length() < 100 && !possibleTitle.isEmpty()) {
+                            trackArtist = possibleArtist;
+                            trackTitle = possibleTitle;
+                        }
+                    }
+
+                    tracks.add(new TrackMetadata(trackNumber, trackArtist, trackTitle));
+                    trackNumber++;
+                }
+            }
+        }
+
+        return tracks;
     }
 
     @Override
