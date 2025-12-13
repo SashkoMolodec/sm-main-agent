@@ -197,6 +197,7 @@ public class DiscogsClient implements SearchEngineService {
                 .filter(r -> r.label() != null && !r.label().isEmpty())
                 .flatMap(r -> r.label().stream())
                 .findFirst()
+                .map(this::cleanLabelName)
                 .orElse("");
 
         return new ReleaseMetadata(
@@ -337,7 +338,7 @@ public class DiscogsClient implements SearchEngineService {
             String label = "";
             if (response.labels() != null && !response.labels().isEmpty()) {
                 DiscogsReleaseResponse.Label firstLabel = response.labels().getFirst();
-                label = firstLabel != null && firstLabel.name() != null ? firstLabel.name() : "";
+                label = firstLabel != null && firstLabel.name() != null ? cleanLabelName(firstLabel.name()) : "";
             }
 
             String coverUrl = null;
@@ -526,6 +527,14 @@ public class DiscogsClient implements SearchEngineService {
         }
         // Remove disambiguation suffix: " (number)" at the end
         return artistName.replaceAll("\\s*\\(\\d+\\)\\s*$", "").trim();
+    }
+
+    private String cleanLabelName(String labelName) {
+        if (labelName == null || labelName.isEmpty()) {
+            return labelName;
+        }
+        // Remove disambiguation suffix: " (number)" at the end
+        return labelName.replaceAll("\\s*\\(\\d+\\)\\s*$", "").trim();
     }
 
     @Override

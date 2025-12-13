@@ -43,21 +43,23 @@ public class TagChangesNotificationListener {
 
             for (TagChangesNotificationDto.TagChangeInfo change : track.changes()) {
                 String tagDisplay = formatTagName(change.tagName());
+                String oldValueDisplay = formatTagValue(change.tagName(), change.oldValue());
+                String newValueDisplay = formatTagValue(change.tagName(), change.newValue());
 
                 if (change.isNew()) {
                     sb.append("   ➕ ")
                       .append(tagDisplay)
-                      .append(": `")
-                      .append(change.newValue())
-                      .append("`\n");
+                      .append(": ")
+                      .append(newValueDisplay)
+                      .append("\n");
                 } else {
                     sb.append("   ✏️ ")
                       .append(tagDisplay)
-                      .append(": `")
-                      .append(change.oldValue() != null ? change.oldValue() : "—")
-                      .append("` → `")
-                      .append(change.newValue())
-                      .append("`\n");
+                      .append(": ")
+                      .append(oldValueDisplay)
+                      .append(" → ")
+                      .append(newValueDisplay)
+                      .append("\n");
                 }
             }
 
@@ -76,7 +78,9 @@ public class TagChangesNotificationListener {
             // Standard ID3 tags
             case "TBPM" -> "bpm";
             case "TKEY" -> "key";
-            case "RATING" -> "rating";
+            case "INITIALKEY" -> "тональність";
+            case "RATING" -> "рейтинг";
+            case "PUBLISHER" -> "лейбл";
             case "TIT2" -> "назва";
             case "TPE1" -> "виконавець";
             case "TALB" -> "альбом";
@@ -103,5 +107,31 @@ public class TagChangesNotificationListener {
                 yield tagName.toLowerCase();
             }
         };
+    }
+
+    private String formatTagValue(String tagName, String value) {
+        if (value == null || value.isEmpty()) {
+            return "`—`";
+        }
+
+        if ("RATING".equalsIgnoreCase(tagName)) {
+            return ratingToStars(value);
+        }
+
+        return "`" + value + "`";
+    }
+
+    private String ratingToStars(String ratingStr) {
+        try {
+            int rating = Integer.parseInt(ratingStr);
+            if (rating == 0) return "☆☆☆☆☆";
+            if (rating <= 51) return "★☆☆☆☆";   // 1 star (Traktor: 51)
+            if (rating <= 102) return "★★☆☆☆";  // 2 stars (Traktor: 102)
+            if (rating <= 153) return "★★★☆☆"; // 3 stars (Traktor: 153)
+            if (rating <= 204) return "★★★★☆"; // 4 stars (Traktor: 204)
+            return "★★★★★";                    // 5 stars (Traktor: 255)
+        } catch (Exception e) {
+            return "`" + ratingStr + "`";
+        }
     }
 }
