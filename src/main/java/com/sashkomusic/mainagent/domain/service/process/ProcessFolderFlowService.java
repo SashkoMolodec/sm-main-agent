@@ -104,13 +104,20 @@ public class ProcessFolderFlowService {
     private FolderParseResult parseFolderAndFilters(String input) {
         String folderName = input.trim();
         String filtersText = null;
-        Path folderPath = Paths.get(downloadsBasePath, folderName);
+
+        Path inputPath = Paths.get(folderName);
+        Path folderPath = inputPath.isAbsolute()
+                ? inputPath
+                : Paths.get(downloadsBasePath, folderName);
 
         if (!Files.exists(folderPath) && folderName.contains(" ")) {
             String[] words = folderName.split("\\s+");
             for (int i = words.length - 1; i > 0; i--) {
                 String candidateFolder = String.join(" ", java.util.Arrays.copyOfRange(words, 0, i));
-                Path candidatePath = Paths.get(downloadsBasePath, candidateFolder);
+                Path candidateInputPath = Paths.get(candidateFolder);
+                Path candidatePath = candidateInputPath.isAbsolute()
+                        ? candidateInputPath
+                        : Paths.get(downloadsBasePath, candidateFolder);
                 if (Files.exists(candidatePath) && Files.isDirectory(candidatePath)) {
                     folderName = candidateFolder;
                     filtersText = String.join(" ", java.util.Arrays.copyOfRange(words, i, words.length));
