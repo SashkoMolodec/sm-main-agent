@@ -457,19 +457,20 @@ public class BandcampClient implements SearchEngineService {
     }
 
     private String extractTitleFromPage(Document doc) {
-        // Try meta tag
+        // Try h2.trackTitle first for a clean title
+        Element titleElement = doc.selectFirst("h2.trackTitle");
+        if (titleElement != null && !titleElement.text().trim().isEmpty()) {
+            return titleElement.text().trim();
+        }
+
+        // Fallback to meta tag and clean it
         Element metaTitle = doc.selectFirst("meta[property=og:title]");
         if (metaTitle != null) {
             String title = metaTitle.attr("content");
             if (!title.isEmpty()) {
-                return title;
+                // handle "Title, by Artist"
+                return title.split(", by ")[0];
             }
-        }
-
-        // Try h2.trackTitle
-        Element titleElement = doc.selectFirst("h2.trackTitle");
-        if (titleElement != null) {
-            return titleElement.text().trim();
         }
 
         return "Unknown Title";
@@ -480,8 +481,12 @@ public class BandcampClient implements SearchEngineService {
         Element metaDate = doc.selectFirst("meta[itemprop=datePublished]");
         if (metaDate != null) {
             String datePublished = metaDate.attr("content"); // Format: "20231031"
-            if (datePublished.length() >= 4) {
-                return datePublished.substring(0, 4);
+            if (datePublished != null && datePublished.length() >= 4) {
+                String year = datePublished.substring(0, 4);
+                if (year.matches("\\d{4}")) {
+                    log.debug("Extracted year {} from meta[itemprop=datePublished]", year);
+                    return year;
+                }
             }
         }
 
@@ -489,20 +494,38 @@ public class BandcampClient implements SearchEngineService {
         Element tralbumScript = doc.selectFirst("script[data-tralbum]");
         if (tralbumScript != null) {
             String json = tralbumScript.attr("data-tralbum");
-            // Look for "release_date" field
-            if (json.contains("\"release_date\"")) {
+            if (json != null && json.contains("\"release_date\"")) {
                 try {
                     int startIdx = json.indexOf("\"release_date\":") + 15;
-                    String dateStr = json.substring(startIdx, startIdx + 10).replaceAll("[^0-9]", "");
-                    if (dateStr.length() >= 4) {
-                        return dateStr.substring(0, 4);
+                    String dateStr = json.substring(startIdx, startIdx + 25).split("\"")[0];
+                    java.util.regex.Pattern yearPattern = java.util.regex.Pattern.compile("\\b(\\d{4})\\b");
+                    java.util.regex.Matcher matcher = yearPattern.matcher(dateStr);
+                    if (matcher.find()) {
+                        String year = matcher.group(1);
+                        log.debug("Extracted year {} from script[data-tralbum]", year);
+                        return year;
                     }
                 } catch (Exception e) {
-                    log.debug("Failed to parse release_date from JSON");
+                    log.debug("Failed to parse release_date from JSON", e);
                 }
             }
         }
+        
+        // Fallback to .tralbum-credits div
+        Element creditsElement = doc.selectFirst("div.tralbum-credits");
+        if (creditsElement != null) {
+            String text = creditsElement.text();
+            // Look for a 4-digit number, probably the year
+            java.util.regex.Pattern yearPattern = java.util.regex.Pattern.compile("\\b(\\d{4})\\b");
+            java.util.regex.Matcher matcher = yearPattern.matcher(text);
+            if (matcher.find()) {
+                String year = matcher.group(1);
+                log.debug("Extracted year {} from div.tralbum-credits", year);
+                return year;
+            }
+        }
 
+        log.warn("Could not extract year from Bandcamp page");
         return "";
     }
 
