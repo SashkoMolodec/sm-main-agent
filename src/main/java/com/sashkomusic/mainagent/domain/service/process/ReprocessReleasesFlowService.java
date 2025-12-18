@@ -83,13 +83,14 @@ public class ReprocessReleasesFlowService {
                     : Paths.get(libraryConfig.getRootPath(), mappedPath);
 
             if (!Files.exists(absolutePath)) {
-                log.warn("Directory not found: {}", absolutePath);
-                return ReprocessResult.error("Directory not found: " + pathStr);
+                var errorMessage = "❌ папка не знайдена: `" + absolutePath + "`";
+                log.warn(errorMessage);
+                return ReprocessResult.error(errorMessage);
             }
 
             if (!Files.isDirectory(absolutePath)) {
                 log.warn("Path is not a directory: {}", absolutePath);
-                return ReprocessResult.error("Path is not a directory: " + pathStr);
+                return ReprocessResult.error("Path is not a directory: " + mappedPath);
             }
 
             QueueResult result = queueReprocessTask(chatId, absolutePath, options);

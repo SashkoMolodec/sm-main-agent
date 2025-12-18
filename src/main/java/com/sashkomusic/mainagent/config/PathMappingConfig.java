@@ -1,11 +1,13 @@
 package com.sashkomusic.mainagent.config;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Configuration;
 
-@Data
-@Component
+@Getter
+@Setter
+@Configuration
 @ConfigurationProperties(prefix = "path.mapping")
 public class PathMappingConfig {
     private boolean enabled;
