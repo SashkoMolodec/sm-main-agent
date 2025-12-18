@@ -117,10 +117,10 @@ public class DiscogsClient implements SearchEngineService {
         log.debug("Mapping {} Discogs results to domain", results.size());
 
         List<DiscogsSearchResponse.Result> releases = results.stream()
-                .filter(r -> "master".equals(r.type()) || "release".equals(r.type()))
+                .filter(r -> "release".equals(r.type()))
                 .toList();
 
-        log.debug("After filtering by type, {} releases remain", releases.size());
+        log.debug("After filtering for 'release' type, {} releases remain", releases.size());
 
         Map<String, List<DiscogsSearchResponse.Result>> grouped = releases.stream()
                 .collect(Collectors.groupingBy(r -> {
@@ -139,10 +139,7 @@ public class DiscogsClient implements SearchEngineService {
     }
 
     private ReleaseMetadata aggregateGroup(List<DiscogsSearchResponse.Result> groupResults) {
-        var representative = groupResults.stream()
-                .filter(r -> "master".equals(r.type()))
-                .findFirst()
-                .orElse(groupResults.getFirst());
+        var representative = groupResults.getFirst();
 
         String artist = extractArtist(representative.title());
         String title = extractTitle(representative.title());
@@ -182,10 +179,7 @@ public class DiscogsClient implements SearchEngineService {
                 .map(e -> e.getKey().toLowerCase())
                 .toList();
 
-        // Construct releaseId for unique identification
-        String releaseId = "discogs:" + (representative.masterId() != null && representative.masterId() != 0 ?
-                "master:" + representative.masterId() :
-                "release:" + representative.id());
+        String releaseId = "discogs:release:" + representative.id();
 
         // masterId for grouping - only set if release has a master
         String masterId = (representative.masterId() != null && representative.masterId() != 0) ?
@@ -272,31 +266,16 @@ public class DiscogsClient implements SearchEngineService {
 
         try {
             DiscogsReleaseResponse response;
-
-            // Fetch from appropriate endpoint
-            if ("master".equals(type)) {
-                response = client.get()
-                        .uri(uriBuilder -> {
-                            uriBuilder.path("/masters/" + id);
-                            if (!apiToken.isEmpty()) {
-                                uriBuilder.queryParam("token", apiToken);
-                            }
-                            return uriBuilder.build();
-                        })
-                        .retrieve()
-                        .body(DiscogsReleaseResponse.class);
-            } else {
-                response = client.get()
-                        .uri(uriBuilder -> {
-                            uriBuilder.path("/releases/" + id);
-                            if (!apiToken.isEmpty()) {
-                                uriBuilder.queryParam("token", apiToken);
-                            }
-                            return uriBuilder.build();
-                        })
-                        .retrieve()
-                        .body(DiscogsReleaseResponse.class);
-            }
+            response = client.get()
+                    .uri(uriBuilder -> {
+                        uriBuilder.path("/releases/" + id);
+                        if (!apiToken.isEmpty()) {
+                            uriBuilder.queryParam("token", apiToken);
+                        }
+                        return uriBuilder.build();
+                    })
+                    .retrieve()
+                    .body(DiscogsReleaseResponse.class);
 
             if (response == null) {
                 log.warn("Release not found: {}", releaseId);
@@ -357,7 +336,7 @@ public class DiscogsClient implements SearchEngineService {
 
             return new ReleaseMetadata(
                     releaseId,
-                    type.equals("master") ? id : null,
+                    id,
                     SearchEngine.DISCOGS,
                     artist,
                     title,
@@ -383,53 +362,25 @@ public class DiscogsClient implements SearchEngineService {
     public List<TrackMetadata> getTracks(String releaseId) {
         log.info("Fetching tracklist from Discogs for release ID: {}", releaseId);
 
-        // Parse releaseId format: "discogs:master:123" or "discogs:release:456"
         if (!releaseId.startsWith("discogs:")) {
             log.warn("Invalid Discogs release ID format: {}", releaseId);
             return List.of();
         }
 
         String[] parts = releaseId.split(":");
-        if (parts.length != 3) {
-            log.warn("Invalid Discogs release ID format: {}", releaseId);
+        if (parts.length != 3 || !"release".equals(parts[1])) {
+            log.warn("Invalid or non-release Discogs ID format: {}", releaseId);
             return List.of();
         }
 
-        String type = parts[1]; // "master" or "release"
         String id = parts[2];   // actual ID
 
         try {
-            // If it's a master, we need to fetch the main release first
-            if ("master".equals(type)) {
-                return getTracksFromMaster(id);
-            } else {
-                return getTracksFromRelease(id);
-            }
+            return getTracksFromRelease(id);
         } catch (Exception ex) {
             log.error("Error fetching tracklist from Discogs: {}", ex.getMessage());
             return List.of();
         }
-    }
-
-    private List<TrackMetadata> getTracksFromMaster(String masterId) {
-        log.info("Fetching master {} to get main release", masterId);
-
-        var masterResponse = client.get()
-                .uri(uriBuilder -> {
-                    uriBuilder.path("/masters/" + masterId);
-                    if (!apiToken.isEmpty()) {
-                        uriBuilder.queryParam("token", apiToken);
-                    }
-                    return uriBuilder.build();
-                })
-                .retrieve()
-                .body(DiscogsReleaseResponse.class);
-
-        if (masterResponse == null || masterResponse.mainRelease() == null) {
-            log.warn("No main release found for master {}", masterId);
-            return List.of();
-        }
-        return getTracksFromRelease(String.valueOf(masterResponse.mainRelease()));
     }
 
     private List<TrackMetadata> getTracksFromRelease(String releaseId) {
@@ -549,11 +500,8 @@ public class DiscogsClient implements SearchEngineService {
 
     @Override
     public String buildReleaseUrl(ReleaseMetadata release) {
-        // Parse "discogs:master:123" or "discogs:release:456"
-        if (release.id().startsWith("discogs:master:")) {
-            String masterId = release.id().substring("discogs:master:".length());
-            return "https://www.discogs.com/master/" + masterId;
-        } else if (release.id().startsWith("discogs:release:")) {
+        // Parse "discogs:release:456"
+        if (release.id().startsWith("discogs:release:")) {
             String releaseId = release.id().substring("discogs:release:".length());
             return "https://www.discogs.com/release/" + releaseId;
         }
