@@ -4,6 +4,7 @@ import com.sashkomusic.mainagent.config.LibraryConfig;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadataFile;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
+import com.sashkomusic.mainagent.domain.service.PathMappingService;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.messaging.producer.ReprocessReleaseTaskProducer;
 import com.sashkomusic.mainagent.messaging.producer.dto.ReprocessReleaseTaskDto;
@@ -33,15 +34,18 @@ public class ReprocessReleasesFlowService {
     private final ReleaseMetadataReader metadataReader;
     private final Map<SearchEngine, SearchEngineService> searchEngines;
     private final ReprocessReleaseTaskProducer taskProducer;
+    private final PathMappingService pathMappingService;
 
     public ReprocessReleasesFlowService(LibraryConfig libraryConfig,
                                         ReleaseMetadataReader metadataReader,
                                         Map<SearchEngine, SearchEngineService> searchEngines,
-                                        ReprocessReleaseTaskProducer taskProducer) {
+                                        ReprocessReleaseTaskProducer taskProducer,
+                                        PathMappingService pathMappingService) {
         this.libraryConfig = libraryConfig;
         this.metadataReader = metadataReader;
         this.searchEngines = searchEngines;
         this.taskProducer = taskProducer;
+        this.pathMappingService = pathMappingService;
     }
 
     public ReprocessResult handle(long chatId, String rawInput) {
@@ -70,11 +74,13 @@ public class ReprocessReleasesFlowService {
 
     private ReprocessResult reprocessSingle(long chatId, String pathStr, ReprocessOptions options) {
         try {
+            String mappedPath = pathMappingService.mapReprocessPath(pathStr);
+
             // Support both absolute and relative paths
-            Path inputPath = Paths.get(pathStr);
+            Path inputPath = Paths.get(mappedPath);
             Path absolutePath = inputPath.isAbsolute()
                     ? inputPath
-                    : Paths.get(libraryConfig.getRootPath(), pathStr);
+                    : Paths.get(libraryConfig.getRootPath(), mappedPath);
 
             if (!Files.exists(absolutePath)) {
                 log.warn("Directory not found: {}", absolutePath);

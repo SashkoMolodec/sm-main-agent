@@ -7,6 +7,7 @@ import com.sashkomusic.mainagent.domain.model.Language;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
+import com.sashkomusic.mainagent.domain.service.PathMappingService;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.infrastracture.client.bandcamp.BandcampClient;
 import com.sashkomusic.mainagent.infrastracture.client.discogs.DiscogsClient;
@@ -43,6 +44,7 @@ public class ProcessFolderFlowService {
     private final ProcessFolderContextHolder contextHolder;
     private final ProcessLibraryTaskProducer libraryTaskProducer;
     private final AiService aiService;
+    private final PathMappingService pathMappingService;
 
     @Value("${downloads.base-path:/Users/okravch/my/sm/sm-download-agent/downloads}")
     private String downloadsBasePath;
@@ -58,7 +60,8 @@ public class ProcessFolderFlowService {
 
     public List<BotResponse> process(long chatId, String input) {
         try {
-            FolderParseResult parseResult = parseFolderAndFilters(input);
+            String processPath = pathMappingService.mapProcessPath(input);
+            FolderParseResult parseResult = parseFolderAndFilters(processPath);
 
             List<BotResponse> validationError = validateFolder(parseResult.folderPath(), parseResult.folderName());
             if (validationError != null) return validationError;
