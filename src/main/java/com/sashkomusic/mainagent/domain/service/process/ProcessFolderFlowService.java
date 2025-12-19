@@ -58,26 +58,24 @@ public class ProcessFolderFlowService {
         return process(chatId, folderName);
     }
 
-    public List<BotResponse> process(long chatId, String input) {
+    public List<BotResponse> process(long chatId, String folderName) {
         try {
-            String processPath = pathMappingService.mapProcessPath(input);
-            FolderParseResult parseResult = parseFolderAndFilters(processPath);
+            String processPath = pathMappingService.mapProcessPath(folderName);
+            FolderResolveResult folder = resolveFolder(processPath);
 
-            List<BotResponse> validationError = validateFolder(parseResult.folderPath(), parseResult.folderName());
+            List<BotResponse> validationError = validateFolder(folder.path(), folder.name());
             if (validationError != null) return validationError;
 
-            List<String> audioFiles = getAudioFiles(parseResult.folderPath());
+            List<String> audioFiles = getAudioFiles(folder.path());
             if (audioFiles.isEmpty()) {
                 return List.of(BotResponse.text("❌ В папці немає аудіо-файлів"));
             }
 
-            log.info("Processing folder: {}, filters: {}, found {} audio files",
-                    parseResult.folderName(), parseResult.filtersText(), audioFiles.size());
+            log.info("Processing folder: {}, found {} audio files", folder.name(), audioFiles.size());
 
-            MetadataSearchRequest searchRequest = buildSearchRequest(
-                    parseResult.folderName(), parseResult.filtersText(), audioFiles);
+            MetadataSearchRequest searchRequest = buildSearchRequest(folder.name(), audioFiles);
 
-            List<BotResponse> requestError = validateSearchRequest(searchRequest, parseResult.folderName());
+            List<BotResponse> requestError = validateSearchRequest(searchRequest, folder.name());
             if (requestError != null) return requestError;
 
             SearchResults searchResults = searchAllSources(searchRequest);
@@ -89,8 +87,7 @@ public class ProcessFolderFlowService {
                 );
             }
 
-            saveSearchContext(chatId, parseResult.folderName(), searchRequest,
-                    searchResults, parseResult.folderPath(), audioFiles);
+            saveSearchContext(chatId, folder.name(), searchRequest, searchResults, folder.path(), audioFiles);
 
             return List.of(
                 BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
@@ -104,33 +101,15 @@ public class ProcessFolderFlowService {
         }
     }
 
-    private FolderParseResult parseFolderAndFilters(String input) {
+    private FolderResolveResult resolveFolder(String input) {
         String folderName = input.trim();
-        String filtersText = null;
 
         Path inputPath = Paths.get(folderName);
         Path folderPath = inputPath.isAbsolute()
                 ? inputPath
                 : Paths.get(downloadsBasePath, folderName);
 
-        if (!Files.exists(folderPath) && folderName.contains(" ")) {
-            String[] words = folderName.split("\\s+");
-            for (int i = words.length - 1; i > 0; i--) {
-                String candidateFolder = String.join(" ", java.util.Arrays.copyOfRange(words, 0, i));
-                Path candidateInputPath = Paths.get(candidateFolder);
-                Path candidatePath = candidateInputPath.isAbsolute()
-                        ? candidateInputPath
-                        : Paths.get(downloadsBasePath, candidateFolder);
-                if (Files.exists(candidatePath) && Files.isDirectory(candidatePath)) {
-                    folderName = candidateFolder;
-                    filtersText = String.join(" ", java.util.Arrays.copyOfRange(words, i, words.length));
-                    folderPath = candidatePath;
-                    break;
-                }
-            }
-        }
-
-        return new FolderParseResult(folderName, filtersText, folderPath);
+        return new FolderResolveResult(folderName, folderPath);
     }
 
     private List<BotResponse> validateFolder(Path folderPath, String folderName) {
@@ -140,13 +119,7 @@ public class ProcessFolderFlowService {
         return null;
     }
 
-    private MetadataSearchRequest buildSearchRequest(String folderName, String filtersText,
-                                                      List<String> audioFiles) {
-        MetadataSearchRequest baseRequest = getBaseSearchRequest(folderName, audioFiles);
-        return mergeFilters(baseRequest, filtersText);
-    }
-
-    private MetadataSearchRequest getBaseSearchRequest(String folderName, List<String> audioFiles) {
+    private MetadataSearchRequest buildSearchRequest(String folderName, List<String> audioFiles) {
         var releaseInfoFromTags = identifierService.identifyFromAudioFile(audioFiles.getFirst());
 
         if (releaseInfoFromTags != null) {
@@ -171,31 +144,6 @@ public class ProcessFolderFlowService {
             }
         }
         return null;
-    }
-
-    private MetadataSearchRequest mergeFilters(MetadataSearchRequest baseRequest, String filtersText) {
-        if (filtersText == null || filtersText.isEmpty() || baseRequest == null) {
-            return baseRequest;
-        }
-
-        log.info("Parsing additional filters: {}", filtersText);
-        MetadataSearchRequest additionalFilters = aiService.parseAdditionalFilters(filtersText);
-
-        return MetadataSearchRequest.create(
-                baseRequest.artist(),
-                baseRequest.release(),
-                baseRequest.recording(),
-                additionalFilters.dateRange() != null && !additionalFilters.dateRange().isEmpty()
-                        ? additionalFilters.dateRange() : baseRequest.dateRange(),
-                !additionalFilters.format().isEmpty() ? additionalFilters.format() : baseRequest.format(),
-                !additionalFilters.type().isEmpty() ? additionalFilters.type() : baseRequest.type(),
-                !additionalFilters.country().isEmpty() ? additionalFilters.country() : baseRequest.country(),
-                !additionalFilters.status().isEmpty() ? additionalFilters.status() : baseRequest.status(),
-                !additionalFilters.style().isEmpty() ? additionalFilters.style() : baseRequest.style(),
-                !additionalFilters.label().isEmpty() ? additionalFilters.label() : baseRequest.label(),
-                !additionalFilters.catno().isEmpty() ? additionalFilters.catno() : baseRequest.catno(),
-                Language.EN
-        );
     }
 
     private List<BotResponse> validateSearchRequest(MetadataSearchRequest searchRequest, String folderName) {
@@ -234,7 +182,7 @@ public class ProcessFolderFlowService {
         storeChatContext(chatId, folderPath, audioFiles);
     }
 
-    private record FolderParseResult(String folderName, String filtersText, Path folderPath) {}
+    private record FolderResolveResult(String name, Path path) {}
 
     private record SearchResults(List<ReleaseMetadata> mbResults,
                                  List<ReleaseMetadata> discogsResults,
