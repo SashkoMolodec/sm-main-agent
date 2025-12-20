@@ -48,6 +48,9 @@ public class MusicBrainzClient implements SearchEngineService {
 
         if (results.isEmpty() && hasRelease) {
             results = tryWithCleanedReleaseTitle(request, results);
+            if (results.isEmpty()) {
+                results = tryWithoutAuthor(request);
+            }
         }
 
         if (results.isEmpty() && hasRecording) {
@@ -71,6 +74,11 @@ public class MusicBrainzClient implements SearchEngineService {
             results = self.searchByRelease(fallbackRequest);
         }
         return results;
+    }
+
+    private List<ReleaseMetadata> tryWithoutAuthor(MetadataSearchRequest request) {
+        log.info("MusicBrainz search returned no results, trying fallback by removing artist name.");
+        return self.searchByRelease(request.withAuthor(""));
     }
 
     @Retryable(

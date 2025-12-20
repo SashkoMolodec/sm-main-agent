@@ -73,4 +73,21 @@ public record MetadataSearchRequest(
                 this.catno
         );
     }
+
+    public MetadataSearchRequest withAuthor(String author) {
+        return new MetadataSearchRequest(
+                this.id,
+                this.artist,
+                author,
+                this.recording,
+                this.dateRange,
+                this.format,
+                this.type,
+                this.country,
+                this.status,
+                this.style,
+                this.label,
+                this.catno
+        );
+    }
 }

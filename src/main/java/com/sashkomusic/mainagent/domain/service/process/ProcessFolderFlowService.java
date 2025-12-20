@@ -1,7 +1,6 @@
 package com.sashkomusic.mainagent.domain.service.process;
 
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
-import com.sashkomusic.mainagent.domain.model.DateRange;
 import com.sashkomusic.mainagent.domain.model.Language;
 import com.sashkomusic.mainagent.domain.model.MetadataSearchRequest;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
@@ -24,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -128,7 +128,7 @@ public class ProcessFolderFlowService {
         if (releaseInfoFromTags != null) {
             log.info("Using release info from audio file tags");
             return MetadataSearchRequest.create(
-                    releaseInfoFromTags.artist(), withAdditionalContext(releaseInfoFromTags.album(), additionalContext),
+                    null, withAdditionalContext(releaseInfoFromTags.album(), additionalContext),
                     null, null, null, null, null, null, null, null, null, Language.EN);
         }
 
@@ -141,7 +141,7 @@ public class ProcessFolderFlowService {
     }
 
     private List<BotResponse> validateSearchRequest(MetadataSearchRequest searchRequest, String folderName) {
-        if (searchRequest == null || searchRequest.artist().isEmpty() || searchRequest.release().isEmpty()) {
+        if (searchRequest == null || searchRequest.release().isEmpty()) {
             return List.of(BotResponse.text(String.format("""
                     ❌ не вдалося розпізнати назву релізу з папки: `%s`
                     
@@ -311,7 +311,7 @@ public class ProcessFolderFlowService {
         }
 
         String normalizedOriginal = originalTitle.toLowerCase().trim();
-        Set<String> originalWords = Set.of(normalizedOriginal.split("\\s+"));
+        Set<String> originalWords = new HashSet<>(java.util.Arrays.asList(normalizedOriginal.split("\\s+")));
 
         return results.stream()
                 .filter(release -> {
