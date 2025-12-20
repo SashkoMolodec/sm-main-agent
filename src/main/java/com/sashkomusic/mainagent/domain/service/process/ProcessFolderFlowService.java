@@ -1,6 +1,5 @@
 package com.sashkomusic.mainagent.domain.service.process;
 
-import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.DateRange;
 import com.sashkomusic.mainagent.domain.model.Language;
@@ -43,7 +42,6 @@ public class ProcessFolderFlowService {
     private final SearchContextService searchContextService;
     private final ProcessFolderContextHolder contextHolder;
     private final ProcessLibraryTaskProducer libraryTaskProducer;
-    private final AiService aiService;
     private final PathMappingService pathMappingService;
     private final com.sashkomusic.mainagent.domain.service.download.DownloadContextHolder downloadContextHolder;
 
@@ -129,10 +127,9 @@ public class ProcessFolderFlowService {
 
         if (releaseInfoFromTags != null) {
             log.info("Using release info from audio file tags");
-            DateRange dateRange = parseDateRange(releaseInfoFromTags.year());
             return MetadataSearchRequest.create(
                     releaseInfoFromTags.artist(), withAdditionalContext(releaseInfoFromTags.album(), additionalContext),
-                    null, dateRange, null, null, null, null, null, null, null, Language.EN);
+                    null, null, null, null, null, null, null, null, null, Language.EN);
         }
 
         log.info("No tags in audio file, parsing folder name");
@@ -141,18 +138,6 @@ public class ProcessFolderFlowService {
 
     private static String withAdditionalContext(String filterValue, String additionalContext) {
         return filterValue + " " + additionalContext;
-    }
-
-    private DateRange parseDateRange(String year) {
-        if (year != null && !year.isEmpty()) {
-            try {
-                int yearInt = Integer.parseInt(year);
-                return new DateRange(yearInt, yearInt);
-            } catch (NumberFormatException e) {
-                log.warn("Could not parse year from tags: {}", year);
-            }
-        }
-        return null;
     }
 
     private List<BotResponse> validateSearchRequest(MetadataSearchRequest searchRequest, String folderName) {
