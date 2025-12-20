@@ -39,6 +39,37 @@ public class DiscogsClient implements SearchEngineService {
                 request.dateRange() != null ? request.dateRange().toDiscogsParam() : "",
                 request.format());
 
+        List<ReleaseMetadata> results = performSearch(request);
+
+        if (results.isEmpty() && !request.artist().isEmpty()) {
+            results = retryWithoutArtist(request);
+        }
+
+        return results;
+    }
+
+    private List<ReleaseMetadata> retryWithoutArtist(MetadataSearchRequest request) {
+        List<ReleaseMetadata> results;
+        log.info("No results found with artist='{}'. Retrying without artist.", request.artist());
+        MetadataSearchRequest requestWithoutArtist = new MetadataSearchRequest(
+                request.id(),
+                "",
+                request.release(),
+                request.recording(),
+                request.dateRange(),
+                request.format(),
+                request.type(),
+                request.country(),
+                request.status(),
+                request.style(),
+                request.label(),
+                request.catno()
+        );
+        results = performSearch(requestWithoutArtist);
+        return results;
+    }
+
+    private List<ReleaseMetadata> performSearch(MetadataSearchRequest request) {
         try {
             var response = client.get()
                     .uri(uriBuilder -> {
