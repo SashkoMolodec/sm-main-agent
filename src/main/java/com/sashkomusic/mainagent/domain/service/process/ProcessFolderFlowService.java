@@ -169,14 +169,13 @@ public class ProcessFolderFlowService {
     }
 
     private SearchResults searchAllSources(MetadataSearchRequest searchRequest) {
-        List<ReleaseMetadata> mbResults = searchSource(MUSICBRAINZ.name(),
-                () -> musicBrainzClient.searchReleases(searchRequest), searchRequest.getTitle(), 4);
-        List<ReleaseMetadata> discogsResults = searchSource(DISCOGS.name(),
-                () -> discogsClient.searchReleases(searchRequest), searchRequest.getTitle(), 4);
-        List<ReleaseMetadata> bandcampResults = searchSource(BANDCAMP.name(),
-                () -> bandcampClient.searchReleases(searchRequest), searchRequest.getTitle(), 3);
+        String title = searchRequest.getTitle();
 
-        return new SearchResults(mbResults, discogsResults, bandcampResults);
+        return new SearchResults(
+                searchSource(() -> musicBrainzClient.searchReleases(searchRequest), title, 4),
+                searchSource(() -> discogsClient.searchReleases(searchRequest), title, 4),
+                searchSource(() -> bandcampClient.searchReleases(searchRequest), title, 3)
+        );
     }
 
     private void saveSearchContext(long chatId, String folderName, MetadataSearchRequest searchRequest,
@@ -304,38 +303,39 @@ public class ProcessFolderFlowService {
         contextHolder.storeReleaseIds(chatId, allReleaseIds);
     }
 
-    private List<ReleaseMetadata> searchSource(String sourceName, SourceSearcher searcher,
-                                               String title, int limit) {
+    private List<ReleaseMetadata> searchSource(SourceSearcher searcher, String title, int limit) {
         try {
             List<ReleaseMetadata> results = searcher.search();
-            log.info("{}: found {} results", sourceName, results.size());
+            log.info("Found {} results", results.size());
 
-            results = filterByTitle(results, title);
-            log.info("{}: {} results after filtering by title", sourceName, results.size());
+            List<ReleaseMetadata> filtered = filterByTitle(results, title);
+            if (filtered.size() != results.size()) {
+                log.info("{} results after filtering by title", filtered.size());
+            }
 
-            return results.stream().limit(limit).toList();
+            return filtered.stream().limit(limit).toList();
         } catch (Exception e) {
-            log.warn("{}: search failed: {}", sourceName, e.getMessage());
+            log.error("Search failed: {}", e.getMessage());
             return List.of();
         }
     }
 
     private List<ReleaseMetadata> filterByTitle(List<ReleaseMetadata> results, String originalTitle) {
-        if (originalTitle == null || originalTitle.isEmpty()) {
+        if (originalTitle == null || originalTitle.isBlank()) {
             return results;
         }
 
-        Set<String> originalTitleWords = Set.of(originalTitle.toLowerCase().split("\\s+"));
+        String normalizedOriginal = originalTitle.toLowerCase().trim();
+        Set<String> originalWords = Set.of(normalizedOriginal.split("\\s+"));
 
         return results.stream()
                 .filter(release -> {
                     String releaseTitle = release.title().toLowerCase();
-                    for (String word : releaseTitle.split("\\s+")) {
-                        if (originalTitleWords.contains(word)) {
-                            return true;
-                        }
+                    if (releaseTitle.contains(normalizedOriginal) || normalizedOriginal.contains(releaseTitle)) {
+                        return true;
                     }
-                    return false;
+                    return Stream.of(releaseTitle.split("\\s+"))
+                            .anyMatch(originalWords::contains);
                 })
                 .toList();
     }
