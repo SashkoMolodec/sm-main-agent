@@ -31,6 +31,7 @@ public record DiscogsReleaseResponse(
             String position,
             String title,
             String duration,
+            @JsonProperty("type_") String type,
             List<Artist> artists
     ) {
     }

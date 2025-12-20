@@ -45,6 +45,7 @@ public class ProcessFolderFlowService {
     private final ProcessLibraryTaskProducer libraryTaskProducer;
     private final AiService aiService;
     private final PathMappingService pathMappingService;
+    private final com.sashkomusic.mainagent.domain.service.download.DownloadContextHolder downloadContextHolder;
 
     @Value("${downloads.base-path:/Users/okravch/my/sm/sm-download-agent/downloads}")
     private String downloadsBasePath;
@@ -59,6 +60,10 @@ public class ProcessFolderFlowService {
     }
 
     public List<BotResponse> process(long chatId, String folderName) {
+        return process(chatId, folderName, "");
+    }
+
+    public List<BotResponse> process(long chatId, String folderName, String additionalContext) {
         try {
             String processPath = pathMappingService.mapProcessPath(folderName);
             FolderResolveResult folder = resolveFolder(processPath);
@@ -73,7 +78,7 @@ public class ProcessFolderFlowService {
 
             log.info("Processing folder: {}, found {} audio files", folder.name(), audioFiles.size());
 
-            MetadataSearchRequest searchRequest = buildSearchRequest(folder.name(), audioFiles);
+            MetadataSearchRequest searchRequest = buildSearchRequest(folder.name(), audioFiles, additionalContext);
 
             List<BotResponse> requestError = validateSearchRequest(searchRequest, folder.name());
             if (requestError != null) return requestError;
@@ -82,17 +87,17 @@ public class ProcessFolderFlowService {
 
             if (searchResults.isEmpty()) {
                 return List.of(
-                    BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
-                    BotResponse.text("❌ нема шось метаданих")
+                        BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
+                        BotResponse.text("❌ нема шось метаданих")
                 );
             }
 
             saveSearchContext(chatId, folder.name(), searchRequest, searchResults, folder.path(), audioFiles);
 
             return List.of(
-                BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
-                buildOptionsMessage(searchResults.mbResults(), searchResults.discogsResults(),
-                        searchResults.bandcampResults())
+                    BotResponse.text(String.format("📄 %d файлів, знайдено метадані:", audioFiles.size())),
+                    buildOptionsMessage(searchResults.mbResults(), searchResults.discogsResults(),
+                            searchResults.bandcampResults())
             );
 
         } catch (Exception e) {
@@ -119,19 +124,23 @@ public class ProcessFolderFlowService {
         return null;
     }
 
-    private MetadataSearchRequest buildSearchRequest(String folderName, List<String> audioFiles) {
+    private MetadataSearchRequest buildSearchRequest(String folderName, List<String> audioFiles, String additionalContext) {
         var releaseInfoFromTags = identifierService.identifyFromAudioFile(audioFiles.getFirst());
 
         if (releaseInfoFromTags != null) {
             log.info("Using release info from audio file tags");
             DateRange dateRange = parseDateRange(releaseInfoFromTags.year());
             return MetadataSearchRequest.create(
-                    releaseInfoFromTags.artist(), releaseInfoFromTags.album(),
+                    releaseInfoFromTags.artist(), withAdditionalContext(releaseInfoFromTags.album(), additionalContext),
                     null, dateRange, null, null, null, null, null, null, null, Language.EN);
         }
 
         log.info("No tags in audio file, parsing folder name");
-        return identifierService.identifyFromFolderName(folderName);
+        return identifierService.identifyFromFolderName(withAdditionalContext(folderName, additionalContext));
+    }
+
+    private static String withAdditionalContext(String filterValue, String additionalContext) {
+        return filterValue + " " + additionalContext;
     }
 
     private DateRange parseDateRange(String year) {
@@ -150,7 +159,7 @@ public class ProcessFolderFlowService {
         if (searchRequest == null || searchRequest.artist().isEmpty() || searchRequest.release().isEmpty()) {
             return List.of(BotResponse.text(String.format("""
                     ❌ не вдалося розпізнати назву релізу з папки: `%s`
-
+                    
                     допиши контексту:
                     • /process Artist - Album
                     • /process Artist - Album касета 1990 україна
@@ -161,11 +170,11 @@ public class ProcessFolderFlowService {
 
     private SearchResults searchAllSources(MetadataSearchRequest searchRequest) {
         List<ReleaseMetadata> mbResults = searchSource(MUSICBRAINZ.name(),
-                () -> musicBrainzClient.searchReleases(searchRequest), 4);
+                () -> musicBrainzClient.searchReleases(searchRequest), searchRequest.getTitle(), 4);
         List<ReleaseMetadata> discogsResults = searchSource(DISCOGS.name(),
-                () -> discogsClient.searchReleases(searchRequest), 4);
+                () -> discogsClient.searchReleases(searchRequest), searchRequest.getTitle(), 4);
         List<ReleaseMetadata> bandcampResults = searchSource(BANDCAMP.name(),
-                () -> bandcampClient.searchReleases(searchRequest), 3);
+                () -> bandcampClient.searchReleases(searchRequest), searchRequest.getTitle(), 3);
 
         return new SearchResults(mbResults, discogsResults, bandcampResults);
     }
@@ -182,7 +191,8 @@ public class ProcessFolderFlowService {
         storeChatContext(chatId, folderPath, audioFiles);
     }
 
-    private record FolderResolveResult(String name, Path path) {}
+    private record FolderResolveResult(String name, Path path) {
+    }
 
     private record SearchResults(List<ReleaseMetadata> mbResults,
                                  List<ReleaseMetadata> discogsResults,
@@ -201,7 +211,25 @@ public class ProcessFolderFlowService {
     }
 
     public List<BotResponse> handleMetadataSelection(long chatId, String rawInput) {
-        Integer optionNumber = aiService.parseOptionNumber(rawInput);
+        String trimmedInput = rawInput.trim();
+
+        if (additionalContextIncluded(trimmedInput)) {
+            String additionalContext = trimmedInput.substring(1).trim();
+
+            String contextKey = contextHolder.getChatContextKey(chatId);
+            if (contextKey == null) {
+                return List.of(BotResponse.text("❌ сесія закінчилась. спробуй /process ще раз"));
+            }
+            ProcessFolderContextHolder.ProcessFolderContext folderContext = contextHolder.get(contextKey);
+            if (folderContext == null) {
+                return List.of(BotResponse.text("❌ контекст втрачено. спробуй /process ще раз"));
+            }
+
+            downloadContextHolder.clearSession(chatId);
+            return process(chatId, folderContext.directoryPath(), additionalContext);
+        }
+
+        Integer optionNumber = parseNumberFromInput(trimmedInput);
         if (optionNumber == null) {
             return List.of(BotResponse.text("❌ невірний номер. спробуй ще раз"));
         }
@@ -245,6 +273,18 @@ public class ProcessFolderFlowService {
         return List.of(BotResponse.text("🚀 опрацьовую..."));
     }
 
+    private static boolean additionalContextIncluded(String trimmedInput) {
+        return trimmedInput.startsWith("+");
+    }
+
+    private Integer parseNumberFromInput(String input) {
+        try {
+            return Integer.parseInt(input.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     public boolean hasActiveContext(long chatId) {
         return contextHolder.getChatContextKey(chatId) != null;
     }
@@ -264,15 +304,40 @@ public class ProcessFolderFlowService {
         contextHolder.storeReleaseIds(chatId, allReleaseIds);
     }
 
-    private List<ReleaseMetadata> searchSource(String sourceName, SourceSearcher searcher, int limit) {
+    private List<ReleaseMetadata> searchSource(String sourceName, SourceSearcher searcher,
+                                               String title, int limit) {
         try {
             List<ReleaseMetadata> results = searcher.search();
             log.info("{}: found {} results", sourceName, results.size());
+
+            results = filterByTitle(results, title);
+            log.info("{}: {} results after filtering by title", sourceName, results.size());
+
             return results.stream().limit(limit).toList();
         } catch (Exception e) {
             log.warn("{}: search failed: {}", sourceName, e.getMessage());
             return List.of();
         }
+    }
+
+    private List<ReleaseMetadata> filterByTitle(List<ReleaseMetadata> results, String originalTitle) {
+        if (originalTitle == null || originalTitle.isEmpty()) {
+            return results;
+        }
+
+        Set<String> originalTitleWords = Set.of(originalTitle.toLowerCase().split("\\s+"));
+
+        return results.stream()
+                .filter(release -> {
+                    String releaseTitle = release.title().toLowerCase();
+                    for (String word : releaseTitle.split("\\s+")) {
+                        if (originalTitleWords.contains(word)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                })
+                .toList();
     }
 
     @FunctionalInterface
@@ -358,7 +423,7 @@ public class ProcessFolderFlowService {
     }
 
     private List<String> getAudioFiles(Path folderPath) throws IOException {
-        try (Stream<Path> files = Files.list(folderPath)) {
+        try (Stream<Path> files = Files.walk(folderPath)) {
             return files
                     .filter(Files::isRegularFile)
                     .filter(this::isAudioFile)

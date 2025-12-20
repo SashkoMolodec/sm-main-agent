@@ -45,11 +45,31 @@ public class MusicBrainzClient implements SearchEngineService {
         }
 
         var results = self.searchByRelease(request);
+
+        if (results.isEmpty() && hasRelease) {
+            results = tryWithCleanedReleaseTitle(request, results);
+        }
+
         if (results.isEmpty() && hasRecording) {
             log.info("No results from release search, trying recording endpoint as fallback");
             return self.searchByRecording(request);
         }
 
+        return results;
+    }
+
+    private List<ReleaseMetadata> tryWithCleanedReleaseTitle(MetadataSearchRequest request, List<ReleaseMetadata> results) {
+        log.info("MusicBrainz search returned no results, trying fallback by cleaning release title.");
+
+        String originalTitle = request.release();
+        String cleanedTitle = originalTitle.replaceAll("\\s*\\([^)]*\\)", "").trim();
+
+        if (!cleanedTitle.equals(originalTitle) && !cleanedTitle.isEmpty()) {
+            MetadataSearchRequest fallbackRequest = request.withRelease(cleanedTitle);
+            log.info("Fallback search with cleaned title: '{}'", cleanedTitle);
+
+            results = self.searchByRelease(fallbackRequest);
+        }
         return results;
     }
 

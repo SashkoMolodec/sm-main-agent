@@ -134,7 +134,7 @@ public class MusicDownloadFlowService {
             return List.of(BotResponse.text("😔 **варіанти пропали, нич нема, давай ше раз.**"));
         }
 
-        Integer optionNumber = aiService.parseOptionNumber(rawInput);
+        Integer optionNumber = parseNumberFromInput(rawInput);
         if (optionNumber == null || optionNumber < 1 || optionNumber > reports.size()) {
             return List.of(BotResponse.text("🤔 **незрозумілий зроз.**"));
         }
@@ -150,6 +150,14 @@ public class MusicDownloadFlowService {
         var flowHandler = downloadFlowHandlers.get(option.source());
         String message = flowHandler.formatDownloadConfirmation(option);
         return List.of(BotResponse.text(message));
+    }
+
+    private Integer parseNumberFromInput(String input) {
+        try {
+            return Integer.parseInt(input.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public List<BotResponse> getDownloadOptions(long chatId, String query) {

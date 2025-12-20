@@ -449,7 +449,22 @@ public class DiscogsClient implements SearchEngineService {
             trackNumber++;
         }
 
-        return tracks;
+        // Filter out headings (e.g., "Disc 1", "Side A") and re-number tracks
+        List<TrackMetadata> finalTracks = new ArrayList<>();
+        int finalTrackNumber = 1;
+        for (TrackMetadata track : tracks) {
+            if (!isHeading(track.title())) {
+                finalTracks.add(new TrackMetadata(finalTrackNumber, track.artist(), track.title()));
+                finalTrackNumber++;
+            }
+        }
+        return finalTracks;
+    }
+
+    private static boolean isHeading(String title) {
+        if (title == null) return false;
+        String lowerTitle = title.toLowerCase();
+        return lowerTitle.startsWith("disc ") || lowerTitle.startsWith("side ");
     }
 
     private String extractArtistName(DiscogsReleaseResponse response) {

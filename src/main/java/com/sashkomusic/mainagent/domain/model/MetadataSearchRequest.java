@@ -56,4 +56,21 @@ public record MetadataSearchRequest(
         }
         return "";
     }
+
+    public MetadataSearchRequest withRelease(String newRelease) {
+        return new MetadataSearchRequest(
+                this.id,
+                this.artist,
+                newRelease,
+                this.recording,
+                this.dateRange,
+                this.format,
+                this.type,
+                this.country,
+                this.status,
+                this.style,
+                this.label,
+                this.catno
+        );
+    }
 }
