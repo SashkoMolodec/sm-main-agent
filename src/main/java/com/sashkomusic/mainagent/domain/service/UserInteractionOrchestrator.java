@@ -29,6 +29,7 @@ public class UserInteractionOrchestrator {
     private final ReleaseSearchFlowService releaseSearchFlowService;
     private final ProcessFolderFlowService processFolderFlowService;
     private final StreamingFlowService streamingFlowService;
+    private final NowPlayingFlowService nowPlayingFlowService;
     private final ReprocessReleasesFlowService reprocessReleasesFlowService;
 
     public List<BotResponse> handleUserRequest(long chatId, String rawInput) {
@@ -66,6 +67,10 @@ public class UserInteractionOrchestrator {
     }
 
     private List<BotResponse> processUserCommands(long chatId, String rawInput) {
+        if (rawInput.startsWith("/np")) {
+            return nowPlayingFlowService.nowPlaying();
+        }
+
         if (rawInput.startsWith("/process")) {
             return processFolderFlowService.handleProcessCommand(chatId, rawInput);
         }

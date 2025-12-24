@@ -1,4 +1,4 @@
-package com.sashkomusic.mainagent.domain.service;
+package com.sashkomusic.mainagent.domain.service.process;
 
 import com.sashkomusic.mainagent.config.PathMappingConfig;
 import lombok.RequiredArgsConstructor;

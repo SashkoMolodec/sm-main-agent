@@ -4,7 +4,6 @@ import com.sashkomusic.mainagent.config.LibraryConfig;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadataFile;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
-import com.sashkomusic.mainagent.domain.service.PathMappingService;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.messaging.producer.ReprocessReleaseTaskProducer;
 import com.sashkomusic.mainagent.messaging.producer.dto.ReprocessReleaseTaskDto;
