@@ -91,11 +91,6 @@ public class MusicDownloadFlowService {
 
         var flowHandler = downloadFlowHandlers.get(dto.source());
 
-        if (dto.results().isEmpty()) {
-            log.info("No results found from {}, checking for fallback", dto.source());
-            return handleFallback(dto, flowHandler);
-        }
-
         var analysisResult = flowHandler.analyzeAll(dto.results(), dto.releaseId(), dto.chatId());
         var reports = analysisResult.reports();
         downloadContextHolder.saveDownloadOptions(dto.chatId(), dto.releaseId(), reports);
