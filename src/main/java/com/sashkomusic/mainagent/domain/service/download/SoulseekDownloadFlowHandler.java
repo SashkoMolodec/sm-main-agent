@@ -58,7 +58,7 @@ public class SoulseekDownloadFlowHandler implements DownloadFlowHandler {
 
     @Override
     public String formatDownloadConfirmation(DownloadOption option) {
-        return "✅ **ок, качаю:**\n%s\n📦 %d файлів, %d MB"
+        return "✅ *ок, качаю:*\n%s\n📦 %d файлів, %d MB"
                 .formatted(
                         option.displayName(),
                         option.files().size(),

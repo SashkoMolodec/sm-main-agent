@@ -31,7 +31,7 @@ public class BandcampDownloadFlowHandler implements DownloadFlowHandler {
 
     @Override
     public String formatDownloadConfirmation(DownloadOption option) {
-        return "✅ **ок, качаю з bandcamp:**\n%s".formatted(option.displayName());
+        return "✅ *ок, качаю з bandcamp:*\n%s".formatted(option.displayName());
     }
 
     @Override

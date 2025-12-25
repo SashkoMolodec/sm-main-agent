@@ -43,7 +43,7 @@ public class QobuzDownloadFlowHandler implements DownloadFlowHandler {
 
     @Override
     public String formatDownloadConfirmation(DownloadOption option) {
-        return "✅ **ок, качаю:**\n%s".formatted(option.displayName());
+        return "✅ *ок, качаю:*\n%s".formatted(option.displayName());
     }
 
     @Override

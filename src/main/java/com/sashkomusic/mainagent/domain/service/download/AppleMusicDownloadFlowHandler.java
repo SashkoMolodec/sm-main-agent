@@ -33,7 +33,7 @@ public class AppleMusicDownloadFlowHandler implements DownloadFlowHandler {
 
     @Override
     public String formatDownloadConfirmation(DownloadOption option) {
-        return "✅ **ок, качаю з apple music:**\n%s".formatted(option.displayName());
+        return "✅ *ок, качаю з apple music:*\n%s".formatted(option.displayName());
     }
 
     @Override
