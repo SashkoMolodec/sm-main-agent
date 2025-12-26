@@ -1,6 +1,7 @@
 package com.sashkomusic.mainagent.messaging.consumer;
 
 import com.sashkomusic.mainagent.api.telegram.TelegramChatBot;
+import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient;
 import com.sashkomusic.mainagent.messaging.consumer.dto.TagChangesNotificationDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class TagChangesNotificationListener {
 
     private final TelegramChatBot chatBot;
+    private final NavidromeClient navidromeClient;
 
     public static final String TOPIC = "tag-changes";
 
@@ -27,6 +29,57 @@ public class TagChangesNotificationListener {
 
         String message = buildNotificationMessage(notification);
         chatBot.sendMessage(defaultChatId, message);
+
+        syncRatingToNavidrome(notification);
+    }
+
+    private void syncRatingToNavidrome(TagChangesNotificationDto notification) {
+        for (TagChangesNotificationDto.TrackChanges track : notification.tracks()) {
+            for (TagChangesNotificationDto.TagChangeInfo change : track.changes()) {
+                if (isRatingChange(change.tagName())) {
+                    String newValue = change.newValue();
+                    if (newValue != null && !newValue.isEmpty()) {
+                        updateNavidromeRating(track.artistName(), track.trackTitle(), newValue);
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isRatingChange(String tagName) {
+        String upperTag = tagName.toUpperCase();
+        return "RATING".equals(upperTag) || "TXXX:RATING".equals(upperTag);
+    }
+
+    private void updateNavidromeRating(String artist, String title, String ratingValue) {
+        try {
+            int wmpRating = Integer.parseInt(ratingValue);
+            int navidromeRating = convertWmpToNavidromeRating(wmpRating);
+
+            if (navidromeRating == 0) {
+                log.debug("Skipping rating update for {} - {} (WMP rating is 0)", artist, title);
+                return;
+            }
+
+            String navidromeId = navidromeClient.findTrackIdByArtistAndTitle(artist, title);
+            if (navidromeId != null) {
+                navidromeClient.setRating(navidromeId, navidromeRating);
+                log.info("✓ Synced rating to Navidrome: {} - {} = {} stars", artist, title, navidromeRating);
+            } else {
+                log.warn("Could not find track in Navidrome to sync rating: {} - {}", artist, title);
+            }
+        } catch (Exception e) {
+            log.error("Failed to update Navidrome rating for {} - {}: {}", artist, title, e.getMessage());
+        }
+    }
+
+    private int convertWmpToNavidromeRating(int wmpRating) {
+        if (wmpRating == 0) return 0;
+        if (wmpRating <= 51) return 1;
+        if (wmpRating <= 102) return 2;
+        if (wmpRating <= 153) return 3;
+        if (wmpRating <= 204) return 4;
+        return 5;
     }
 
     private String buildNotificationMessage(TagChangesNotificationDto notification) {

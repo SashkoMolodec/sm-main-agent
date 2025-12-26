@@ -8,6 +8,7 @@ import com.sashkomusic.mainagent.domain.service.process.ProcessFolderFlowService
 import com.sashkomusic.mainagent.domain.service.process.ReprocessReleasesFlowService;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import com.sashkomusic.mainagent.domain.service.streaming.StreamingFlowService;
+import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class UserInteractionOrchestrator {
     private final StreamingFlowService streamingFlowService;
     private final NowPlayingFlowService nowPlayingFlowService;
     private final ReprocessReleasesFlowService reprocessReleasesFlowService;
+    private final NavidromeClient navidromeClient;
 
     public List<BotResponse> handleUserRequest(long chatId, String rawInput) {
         var res = processUserCommands(chatId, rawInput);
@@ -63,6 +65,9 @@ public class UserInteractionOrchestrator {
         if (data.startsWith("STREAM:")) {
             return streamingFlowService.handleStreamingPlatforms(chatId, data);
         }
+        if (data.startsWith("RATE:")) {
+            return handleRateCallback(chatId, data);
+        }
         return List.of(BotResponse.text("хз, пупупу"));
     }
 
@@ -84,5 +89,29 @@ public class UserInteractionOrchestrator {
             return processFolderFlowService.handleMetadataSelection(chatId, rawInput);
         }
         return Collections.emptyList();
+    }
+
+    private List<BotResponse> handleRateCallback(long chatId, String data) {
+        String[] parts = data.split(":");
+        if (parts.length != 4) {
+            return List.of(BotResponse.text("невірний формат рейтингу"));
+        }
+
+        try {
+            Long trackId = Long.parseLong(parts[1]);
+            int rating = Integer.parseInt(parts[2]);
+            String navidromeId = parts[3];
+
+            if (rating < 1 || rating > 5) {
+                return List.of(BotResponse.text("рейтинг має бути від 1 до 5"));
+            }
+
+            navidromeClient.setRating(navidromeId, rating);
+
+            return nowPlayingFlowService.rateTrack(chatId, trackId, rating);
+        } catch (NumberFormatException e) {
+            log.error("Failed to parse rate callback: {}", data, e);
+            return List.of(BotResponse.text("помилка обробки рейтингу"));
+        }
     }
 }

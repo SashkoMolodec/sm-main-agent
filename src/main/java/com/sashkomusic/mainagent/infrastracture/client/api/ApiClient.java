@@ -19,17 +19,18 @@ public class ApiClient {
                 .baseUrl(apiBaseUrl).build();
     }
 
-    public Optional<TrackDto> findTrackByTitle(String title) {
+    public Optional<TrackDto> findTrackByArtistAndTitle(String artist, String title) {
         try {
             return Optional.ofNullable(restClient.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/tracks")
+                            .path("/tracks/search")
+                            .queryParam("artist", artist)
                             .queryParam("title", title)
                             .build())
                     .retrieve()
                     .body(TrackDto.class));
         } catch (Exception e) {
-            log.error("Failed to find track by title {}: {}", title, e.getMessage());
+            log.error("Failed to find track by artist '{}' and title '{}': {}", artist, title, e.getMessage());
             return Optional.empty();
         }
     }
