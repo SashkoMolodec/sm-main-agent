@@ -1,5 +1,6 @@
 package com.sashkomusic.mainagent.domain.service.process;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Service
 public class ProcessFolderContextHolder {
 
@@ -58,5 +60,18 @@ public class ProcessFolderContextHolder {
     public void clearChatSelection(long chatId) {
         chatReleaseIds.remove(chatId);
         chatContextKeys.remove(chatId);
+    }
+
+    public void clearAllContexts() {
+        int contextsCount = contexts.size();
+        int releaseIdsCount = chatReleaseIds.size();
+        int contextKeysCount = chatContextKeys.size();
+
+        contexts.clear();
+        chatReleaseIds.clear();
+        chatContextKeys.clear();
+
+        log.info("Cleared all process contexts: {} contexts, {} release mappings, {} chat mappings",
+                contextsCount, releaseIdsCount, contextKeysCount);
     }
 }

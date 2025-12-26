@@ -39,6 +39,12 @@ public class DownloadContextHolder {
         downloadSessions.remove(chatId);
     }
 
+    public void clearAllSessions() {
+        int count = downloadSessions.size();
+        downloadSessions.clear();
+        log.info("Cleared all download sessions: {} sessions", count);
+    }
+
     private record DownloadContext(
             String chosenReleaseId,
             List<DownloadFlowHandler.OptionReport> optionReports

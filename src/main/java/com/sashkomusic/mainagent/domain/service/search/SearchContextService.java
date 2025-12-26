@@ -116,4 +116,17 @@ public class SearchContextService {
         platformLinksCache.put(releaseId, platforms);
         log.debug("Cached platform links for releaseId={}", releaseId);
     }
+
+    public void clearAllCaches() {
+        int releasesCount = releaseMetadata.size();
+        int searchesCount = userSearches.size();
+        int linksCount = platformLinksCache.size();
+
+        releaseMetadata.clear();
+        userSearches.clear();
+        platformLinksCache.clear();
+
+        log.info("Cleared all search caches: {} releases, {} searches, {} platform links",
+                releasesCount, searchesCount, linksCount);
+    }
 }

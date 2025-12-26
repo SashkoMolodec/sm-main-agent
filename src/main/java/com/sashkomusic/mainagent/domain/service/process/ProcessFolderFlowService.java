@@ -411,6 +411,7 @@ public class ProcessFolderFlowService {
             return files
                     .filter(Files::isRegularFile)
                     .filter(this::isAudioFile)
+                    .filter(this::isNotHiddenMacFile)
                     .map(Path::toString)
                     .toList();
         }
@@ -419,6 +420,11 @@ public class ProcessFolderFlowService {
     private boolean isAudioFile(Path file) {
         String filename = file.getFileName().toString().toLowerCase();
         return AUDIO_EXTENSIONS.stream().anyMatch(ext -> filename.endsWith("." + ext));
+    }
+
+    private boolean isNotHiddenMacFile(Path file) {
+        String filename = file.getFileName().toString();
+        return !filename.startsWith("._");
     }
 
     private String extractFolderName(String rawInput) {

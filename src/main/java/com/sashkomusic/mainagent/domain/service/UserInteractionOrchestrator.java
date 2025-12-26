@@ -3,10 +3,13 @@ package com.sashkomusic.mainagent.domain.service;
 import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.UserIntent;
+import com.sashkomusic.mainagent.domain.service.download.DownloadContextHolder;
 import com.sashkomusic.mainagent.domain.service.download.MusicDownloadFlowService;
+import com.sashkomusic.mainagent.domain.service.process.ProcessFolderContextHolder;
 import com.sashkomusic.mainagent.domain.service.process.ProcessFolderFlowService;
 import com.sashkomusic.mainagent.domain.service.process.ReprocessReleasesFlowService;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
+import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.domain.service.streaming.StreamingFlowService;
 import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +36,9 @@ public class UserInteractionOrchestrator {
     private final NowPlayingFlowService nowPlayingFlowService;
     private final ReprocessReleasesFlowService reprocessReleasesFlowService;
     private final NavidromeClient navidromeClient;
+    private final SearchContextService searchContextService;
+    private final DownloadContextHolder downloadContextHolder;
+    private final ProcessFolderContextHolder processFolderContextHolder;
 
     public List<BotResponse> handleUserRequest(long chatId, String rawInput) {
         var res = processUserCommands(chatId, rawInput);
@@ -72,6 +78,10 @@ public class UserInteractionOrchestrator {
     }
 
     private List<BotResponse> processUserCommands(long chatId, String rawInput) {
+        if (rawInput.equalsIgnoreCase("стоп")) {
+            return clearAllCaches();
+        }
+
         if (rawInput.startsWith("/np")) {
             return nowPlayingFlowService.nowPlaying();
         }
@@ -89,6 +99,16 @@ public class UserInteractionOrchestrator {
             return processFolderFlowService.handleMetadataSelection(chatId, rawInput);
         }
         return Collections.emptyList();
+    }
+
+    private List<BotResponse> clearAllCaches() {
+        log.info("Clearing all in-memory caches");
+
+        searchContextService.clearAllCaches();
+        downloadContextHolder.clearAllSessions();
+        processFolderContextHolder.clearAllContexts();
+
+        return List.of(BotResponse.text("🧹 усі кеші очищено"));
     }
 
     private List<BotResponse> handleRateCallback(long chatId, String data) {
