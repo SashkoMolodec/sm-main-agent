@@ -25,7 +25,7 @@ public class NowPlayingFlowService {
         NavidromeClient.CurrentTrackInfo trackInfo = navidromeClient.getCurrentlyPlayingTrackInfo();
 
         if (trackInfo == null) {
-            return List.of(BotResponse.text("зараз нічого не грає"));
+            return List.of(BotResponse.text("зараз нич не грає 🥺"));
         }
 
         Optional<TrackDto> track = apiClient.findTrackByArtistAndTitle(trackInfo.artist(), trackInfo.title());
