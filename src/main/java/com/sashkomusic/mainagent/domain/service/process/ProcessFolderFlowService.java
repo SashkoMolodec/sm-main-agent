@@ -111,7 +111,8 @@ public class ProcessFolderFlowService {
                 ? inputPath
                 : Paths.get(downloadsBasePath, folderName);
 
-        return new FolderResolveResult(folderName, folderPath);
+        String cleanedFolderName = cleanFolderName(folderPath.getFileName().toString());
+        return new FolderResolveResult(cleanedFolderName, folderPath);
     }
 
     private List<BotResponse> validateFolder(Path folderPath, String folderName) {
@@ -448,5 +449,14 @@ public class ProcessFolderFlowService {
         }
 
         return trimmed;
+    }
+
+    private static String cleanFolderName(String folderName) {
+        return folderName
+                .replaceAll("\\[.*?\\]", "")
+                .replaceAll("[()]", "")
+                .replaceAll("[^\\p{L}\\p{N}\\s]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 }
