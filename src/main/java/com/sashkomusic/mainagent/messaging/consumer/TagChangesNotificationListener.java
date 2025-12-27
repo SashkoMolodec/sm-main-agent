@@ -48,7 +48,9 @@ public class TagChangesNotificationListener {
 
     private boolean isRatingChange(String tagName) {
         String upperTag = tagName.toUpperCase();
-        return "RATING".equals(upperTag) || "TXXX:RATING".equals(upperTag);
+        return "RATING".equals(upperTag) ||
+               "RATING WMP".equals(upperTag) ||
+               "TXXX:RATING".equals(upperTag);
     }
 
     private void updateNavidromeRating(String artist, String title, String ratingValue) {
