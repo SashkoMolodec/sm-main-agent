@@ -65,7 +65,7 @@ public class ProcessFolderFlowService {
             String processPath = pathMappingService.mapProcessPath(folderName);
             FolderResolveResult folder = resolveFolder(processPath);
 
-            List<BotResponse> validationError = validateFolder(folder.path(), folder.name());
+            List<BotResponse> validationError = validateFolder(folder.path());
             if (validationError != null) return validationError;
 
             List<String> audioFiles = getAudioFiles(folder.path());
@@ -115,9 +115,9 @@ public class ProcessFolderFlowService {
         return new FolderResolveResult(cleanedFolderName, folderPath);
     }
 
-    private List<BotResponse> validateFolder(Path folderPath, String folderName) {
+    private List<BotResponse> validateFolder(Path folderPath) {
         if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
-            return List.of(BotResponse.text("❌ папка не знайдена: `" + folderName + "`"));
+            return List.of(BotResponse.text("❌ папка не знайдена: `" + folderPath + "`"));
         }
         return null;
     }
