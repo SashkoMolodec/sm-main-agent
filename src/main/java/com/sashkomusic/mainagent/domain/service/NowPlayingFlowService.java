@@ -1,9 +1,11 @@
 package com.sashkomusic.mainagent.domain.service;
 
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.config.IcecastConfig;
 import com.sashkomusic.mainagent.domain.service.djtag.DjTagContextHolder;
 import com.sashkomusic.mainagent.infrastracture.client.api.ApiClient;
 import com.sashkomusic.mainagent.infrastracture.client.api.dto.TrackDto;
+import com.sashkomusic.mainagent.infrastracture.client.icecast.IcecastClient;
 import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient;
 import com.sashkomusic.mainagent.messaging.producer.RateTrackTaskProducer;
 import com.sashkomusic.mainagent.messaging.producer.dto.RateTrackTaskDto;
@@ -19,12 +21,19 @@ import java.util.*;
 public class NowPlayingFlowService {
 
     private final NavidromeClient navidromeClient;
+    private final IcecastClient icecastClient;
+    private final IcecastConfig icecastConfig;
     private final ApiClient apiClient;
     private final RateTrackTaskProducer rateTrackTaskProducer;
     private final DjTagContextHolder djTagContextHolder;
 
     public List<BotResponse> nowPlaying(long chatId) {
         NavidromeClient.CurrentTrackInfo trackInfo = navidromeClient.getCurrentlyPlayingTrackInfo();
+
+        if (trackInfo == null && icecastConfig.isEnabled()) {
+            log.info("Navidrome returned null, trying Icecast fallback");
+            trackInfo = icecastClient.getCurrentlyPlayingTrackInfo();
+        }
 
         if (trackInfo == null) {
             return List.of(BotResponse.text("зараз нич не грає 🥺"));
@@ -148,5 +157,27 @@ public class NowPlayingFlowService {
             case "closer" -> "🎆";
             default -> "";
         };
+    }
+
+    private List<BotResponse> handleIcecastTrack(NavidromeClient.CurrentTrackInfo trackInfo) {
+        log.info("Handling Icecast track: {} - {}", trackInfo.artist(), trackInfo.title());
+
+        StringBuilder message = new StringBuilder();
+        message.append("зараз лабанить ");
+
+        if (trackInfo.artist() != null && !trackInfo.artist().isEmpty() &&
+                !trackInfo.artist().equalsIgnoreCase("Unknown Artist")) {
+            message.append("_")
+                    .append(trackInfo.artist())
+                    .append(" — ")
+                    .append(trackInfo.title())
+                    .append("_");
+        } else {
+            message.append("_").append(trackInfo.title()).append("_");
+        }
+
+        message.append("\n\n🎧 live stream");
+
+        return List.of(BotResponse.text(message.toString().toLowerCase()));
     }
 }
