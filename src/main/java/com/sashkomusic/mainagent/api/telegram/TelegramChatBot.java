@@ -81,7 +81,7 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
     }
 
     public void sendResponse(long chatId, BotResponse response) {
-        var keyboardMarkup = createKeyboard(response.buttons());
+        var keyboardMarkup = createKeyboard(response.buttons(), response.buttonRows());
         boolean hasImage = response.imageUrl() != null && !response.imageUrl().isBlank();
 
         if (hasImage) {
@@ -114,7 +114,6 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
             log.error("❌ Failed to send with Markdown parsing to [{}]: {}. Retrying as plain text",
                     chatId, e.getMessage());
 
-            // Fallback: send as plain text without parsing
             try {
                 SendMessage plainMessage = SendMessage.builder()
                         .chatId(chatId)
@@ -133,7 +132,22 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
         sendResponse(chatId, BotResponse.text(text));
     }
 
-    private InlineKeyboardMarkup createKeyboard(Map<String, String> buttons) {
+    private InlineKeyboardMarkup createKeyboard(Map<String, String> buttons, List<List<BotResponse.ButtonDto>> buttonRows) {
+        if (buttonRows != null && !buttonRows.isEmpty()) {
+            List<InlineKeyboardRow> rows = new ArrayList<>();
+            for (List<BotResponse.ButtonDto> row : buttonRows) {
+                List<InlineKeyboardButton> rowButtons = new ArrayList<>();
+                for (BotResponse.ButtonDto btn : row) {
+                    rowButtons.add(InlineKeyboardButton.builder()
+                            .text(btn.label())
+                            .callbackData(btn.callbackData())
+                            .build());
+                }
+                rows.add(new InlineKeyboardRow(rowButtons));
+            }
+            return new InlineKeyboardMarkup(rows);
+        }
+
         if (buttons == null || buttons.isEmpty()) {
             return null;
         }

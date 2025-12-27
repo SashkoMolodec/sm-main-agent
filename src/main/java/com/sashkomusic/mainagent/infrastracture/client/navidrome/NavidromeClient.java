@@ -49,37 +49,6 @@ public class NavidromeClient {
         triggerScan(null);
     }
 
-    public String getCurrentlyPlayingTrackPath() {
-        try {
-            URI uri = buildCurrentlyPlayingUri();
-
-            log.info("Fetching currently playing track from Navidrome");
-
-            NavidromeNowPlayingResponse response = restClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .body(NavidromeNowPlayingResponse.class);
-
-            if (response != null &&
-                    response.subsonicResponse() != null &&
-                    response.subsonicResponse().nowPlaying() != null &&
-                    response.subsonicResponse().nowPlaying().entry() != null &&
-                    !response.subsonicResponse().nowPlaying().entry().isEmpty()) {
-
-                String path = response.subsonicResponse().nowPlaying().entry().getFirst().path();
-                log.info("✓ Successfully fetched currently playing track: {}", path);
-                return path;
-            }
-
-            log.warn("No tracks currently playing in Navidrome");
-            return null;
-
-        } catch (Exception e) {
-            log.error("Failed to fetch currently playing track: {}", e.getMessage(), e);
-            return null;
-        }
-    }
-
     public record CurrentTrackInfo(String navidromeId, String artist, String title) {
     }
 

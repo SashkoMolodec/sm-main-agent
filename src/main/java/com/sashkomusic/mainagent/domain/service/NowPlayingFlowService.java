@@ -1,6 +1,7 @@
 package com.sashkomusic.mainagent.domain.service;
 
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
+import com.sashkomusic.mainagent.domain.service.djtag.DjTagContextHolder;
 import com.sashkomusic.mainagent.infrastracture.client.api.ApiClient;
 import com.sashkomusic.mainagent.infrastracture.client.api.dto.TrackDto;
 import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient;
@@ -20,8 +21,9 @@ public class NowPlayingFlowService {
     private final NavidromeClient navidromeClient;
     private final ApiClient apiClient;
     private final RateTrackTaskProducer rateTrackTaskProducer;
+    private final DjTagContextHolder djTagContextHolder;
 
-    public List<BotResponse> nowPlaying() {
+    public List<BotResponse> nowPlaying(long chatId) {
         NavidromeClient.CurrentTrackInfo trackInfo = navidromeClient.getCurrentlyPlayingTrackInfo();
 
         if (trackInfo == null) {
@@ -36,6 +38,8 @@ public class NowPlayingFlowService {
             return List.of(BotResponse.text("зараз грає: %s - %s, але трек не знайдено в БД".formatted(trackInfo.artist(), trackInfo.title())));
         }
 
+        djTagContextHolder.setTrackContext(chatId, trackDto, trackInfo.navidromeId(), false);
+
         StringBuilder message = new StringBuilder();
 
         message.append("зараз лабанить ");
@@ -46,9 +50,20 @@ public class NowPlayingFlowService {
             message.append("_").append(trackDto.title()).append("_");
         }
 
+        StringBuilder emojiLine = new StringBuilder();
         if (trackDto.rating() != null) {
             String stars = convertWmpRatingToStars(trackDto.rating());
-            message.append("\n").append(stars);
+            emojiLine.append(stars);
+        }
+        if (trackDto.djEnergy() != null && !trackDto.djEnergy().isEmpty()) {
+            emojiLine.append(" ").append(convertEnergyToEmoji(trackDto.djEnergy()));
+        }
+        if (trackDto.djFunction() != null && !trackDto.djFunction().isEmpty()) {
+            emojiLine.append(convertFunctionToEmoji(trackDto.djFunction()));
+        }
+
+        if (emojiLine.length() > 0) {
+            message.append("\n").append(emojiLine);
         }
 
         message.append("\n\n✏️ оціни:");
@@ -57,18 +72,28 @@ public class NowPlayingFlowService {
         return List.of(BotResponse.withButtons(message.toString().toLowerCase(), ratingButtons));
     }
 
+    public List<BotResponse> handleRate(long chatId, String data) {
+        String[] parts = data.split(":");
+        if (parts.length != 4) {
+            return List.of(BotResponse.text("невірний формат рейтингу"));
+        }
 
-    private String extractTrackTitle(String path) {
-        // Беремо тільки ім'я файлу (напр. "03 - Outro45cut.flac")
-        String filename = new java.io.File(path).getName();
+        try {
+            Long trackId = Long.parseLong(parts[1]);
+            int rating = Integer.parseInt(parts[2]);
+            String navidromeId = parts[3];
 
-        // Видаляємо розширення
-        String nameWithoutExt = filename.replaceFirst("\\.[^.]+$", "");
+            if (rating < 1 || rating > 5) {
+                return List.of(BotResponse.text("рейтинг має бути від 1 до 5"));
+            }
 
-        // Видаляємо номер треку і дефіс на початку (напр. "03 - ", "01. ")
-        String title = nameWithoutExt.replaceFirst("^[A-Z]?\\d+[\\s.-]+", "");
+            navidromeClient.setRating(navidromeId, rating);
 
-        return title.trim();
+            return rateTrack(chatId, trackId, rating);
+        } catch (NumberFormatException e) {
+            log.error("Failed to parse rate callback: {}", data, e);
+            return List.of(BotResponse.text("помилка обробки рейтингу"));
+        }
     }
 
     private Map<String, String> createRatingButtons(Long trackId, String navidromeId) {
@@ -78,6 +103,7 @@ public class NowPlayingFlowService {
         buttons.put("⭐ 3", "RATE:" + trackId + ":3:" + navidromeId);
         buttons.put("⭐ 4", "RATE:" + trackId + ":4:" + navidromeId);
         buttons.put("⭐ 5", "RATE:" + trackId + ":5:" + navidromeId);
+        buttons.put("➕", "EXPAND_DJ_RATE:" + trackId + ":" + navidromeId);
         return buttons;
     }
 
@@ -91,16 +117,36 @@ public class NowPlayingFlowService {
     private String convertWmpRatingToStars(String ratingStr) {
         try {
             int rating = Integer.parseInt(ratingStr);
-            // Convert WMP format to stars
-            if (rating == 0) return "☆☆☆☆☆";
-            if (rating <= 51) return "★☆☆☆☆";   // 1 star
-            if (rating <= 102) return "★★☆☆☆";  // 2 stars
-            if (rating <= 153) return "★★★☆☆";  // 3 stars
-            if (rating <= 204) return "★★★★☆";  // 4 stars
-            return "★★★★★";                      // 5 stars
+            if (rating == 0) return "";
+            if (rating <= 51) return "⭐";   // 1 star
+            if (rating <= 102) return "⭐⭐";  // 2 stars
+            if (rating <= 153) return "⭐⭐⭐";  // 3 stars
+            if (rating <= 204) return "⭐⭐⭐⭐";  // 4 stars
+            return "⭐⭐⭐⭐⭐";                      // 5 stars
         } catch (NumberFormatException e) {
             log.warn("Invalid rating format: {}", ratingStr);
             return "";
         }
+    }
+
+    private String convertEnergyToEmoji(String energy) {
+        return switch (energy) {
+            case "E1" -> "⚡";
+            case "E2" -> "⚡⚡";
+            case "E3" -> "⚡⚡⚡";
+            case "E4" -> "⚡⚡⚡⚡";
+            case "E5" -> "⚡⚡⚡⚡⚡";
+            default -> "";
+        };
+    }
+
+    private String convertFunctionToEmoji(String function) {
+        return switch (function) {
+            case "intro" -> "🌅";
+            case "tool" -> "🔧";
+            case "banger" -> "💥";
+            case "closer" -> "🎆";
+            default -> "";
+        };
     }
 }
