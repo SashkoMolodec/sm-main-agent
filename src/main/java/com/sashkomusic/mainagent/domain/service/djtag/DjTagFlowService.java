@@ -158,6 +158,6 @@ public class DjTagFlowService {
         log.info("Adding comment for track {} from chatId={}: {}", trackId, chatId, comment);
         AddCommentTaskDto task = new AddCommentTaskDto(trackId, comment, chatId);
         addCommentTaskProducer.send(task);
-        return Collections.emptyList();
+        return List.of(BotResponse.text("🗿 крутий"));
     }
 }
