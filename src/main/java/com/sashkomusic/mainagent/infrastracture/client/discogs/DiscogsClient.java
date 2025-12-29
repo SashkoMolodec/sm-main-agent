@@ -6,10 +6,10 @@ import com.sashkomusic.mainagent.domain.model.ReleaseMetadataFile;
 import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriBuilder;
@@ -69,6 +69,8 @@ public class DiscogsClient implements SearchEngineService {
         return results;
     }
 
+    @CircuitBreaker(name = "discogsClient", fallbackMethod = "performSearchFallback")
+    @Retry(name = "discogsClient")
     private List<ReleaseMetadata> performSearch(MetadataSearchRequest request) {
         try {
             var response = client.get()
@@ -89,8 +91,14 @@ public class DiscogsClient implements SearchEngineService {
 
         } catch (Exception ex) {
             log.error("Error searching Discogs: {}", ex.getMessage());
-            return List.of();
+            throw ex;
         }
+    }
+
+    private List<ReleaseMetadata> performSearchFallback(MetadataSearchRequest request, Exception e) {
+        log.warn("Discogs performSearch fallback triggered for artist '{}', release '{}': {}",
+            request.artist(), request.release(), e.getMessage());
+        return List.of();
     }
 
     private void addDiscogsParameters(UriBuilder builder, MetadataSearchRequest request) {
@@ -269,14 +277,8 @@ public class DiscogsClient implements SearchEngineService {
         return text.replaceAll("[*?\\[\\]{}|<>\"'`]", "").trim();
     }
 
-    @Retryable(
-            maxAttempts = 3,
-            backoff = @Backoff(
-                    delay = 2000,      // 2 seconds
-                    multiplier = 2.0,  // exponential backoff
-                    maxDelay = 10000   // max 10 seconds
-            )
-    )
+    @CircuitBreaker(name = "discogsClient", fallbackMethod = "getReleaseByIdFallback")
+    @Retry(name = "discogsClient")
     public ReleaseMetadata getReleaseById(String releaseId) {
         log.info("Fetching release metadata from Discogs for ID: {}", releaseId);
 
@@ -385,10 +387,18 @@ public class DiscogsClient implements SearchEngineService {
 
         } catch (Exception ex) {
             log.error("Error fetching release metadata from Discogs (will retry): {}", ex.getMessage());
-            throw ex; // Let @Retryable handle it
+            throw ex;
         }
     }
 
+    public ReleaseMetadata getReleaseByIdFallback(String releaseId, Exception e) {
+        log.warn("Discogs getReleaseById fallback triggered for release ID '{}': {}",
+            releaseId, e.getMessage());
+        return null;
+    }
+
+    @CircuitBreaker(name = "discogsClient", fallbackMethod = "getTracksFallback")
+    @Retry(name = "discogsClient")
     @Override
     public List<TrackMetadata> getTracks(String releaseId) {
         log.info("Fetching tracklist from Discogs for release ID: {}", releaseId);
@@ -410,8 +420,14 @@ public class DiscogsClient implements SearchEngineService {
             return getTracksFromRelease(id);
         } catch (Exception ex) {
             log.error("Error fetching tracklist from Discogs: {}", ex.getMessage());
-            return List.of();
+            throw ex;
         }
+    }
+
+    public List<TrackMetadata> getTracksFallback(String releaseId, Exception e) {
+        log.warn("Discogs getTracks fallback triggered for release ID '{}': {}",
+            releaseId, e.getMessage());
+        return List.of();
     }
 
     private List<TrackMetadata> getTracksFromRelease(String releaseId) {

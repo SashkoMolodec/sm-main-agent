@@ -3,6 +3,8 @@ package com.sashkomusic.mainagent.infrastracture.client.icecast;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.sashkomusic.mainagent.config.IcecastConfig;
 import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient.CurrentTrackInfo;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -22,6 +24,8 @@ public class IcecastClient {
         this.config = config;
     }
 
+    @CircuitBreaker(name = "icecastClient", fallbackMethod = "getCurrentlyPlayingTrackInfoFallback")
+    @Retry(name = "icecastClient")
     public CurrentTrackInfo getCurrentlyPlayingTrackInfo() {
         try {
             URI uri = buildStatusJsonUri();
@@ -67,9 +71,14 @@ public class IcecastClient {
             return null;
 
         } catch (Exception e) {
-            log.error("Failed to fetch Icecast track info: {}", e.getMessage(), e);
-            return null;
+            log.error("Failed to fetch Icecast track info: {}", e.getMessage());
+            throw e;
         }
+    }
+
+    private CurrentTrackInfo getCurrentlyPlayingTrackInfoFallback(Exception e) {
+        log.warn("Icecast getCurrentlyPlayingTrackInfo fallback triggered: {}", e.getMessage());
+        return null;
     }
 
     private URI buildStatusJsonUri() {

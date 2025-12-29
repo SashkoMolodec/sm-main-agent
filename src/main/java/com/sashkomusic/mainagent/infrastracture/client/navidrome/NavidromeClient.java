@@ -2,6 +2,8 @@ package com.sashkomusic.mainagent.infrastracture.client.navidrome;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.sashkomusic.mainagent.config.NavidromeConfig;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -52,6 +54,8 @@ public class NavidromeClient {
     public record CurrentTrackInfo(String navidromeId, String artist, String title) {
     }
 
+    @CircuitBreaker(name = "navidromeClient", fallbackMethod = "getCurrentlyPlayingTrackInfoFallback")
+    @Retry(name = "navidromeClient")
     public CurrentTrackInfo getCurrentlyPlayingTrackInfo() {
         try {
             URI uri = buildCurrentlyPlayingUri();
@@ -78,9 +82,14 @@ public class NavidromeClient {
             return null;
 
         } catch (Exception e) {
-            log.error("Failed to fetch currently playing track info: {}", e.getMessage(), e);
-            return null;
+            log.error("Failed to fetch currently playing track info: {}", e.getMessage());
+            throw e;
         }
+    }
+
+    private CurrentTrackInfo getCurrentlyPlayingTrackInfoFallback(Exception e) {
+        log.warn("Navidrome getCurrentlyPlayingTrackInfo fallback triggered: {}", e.getMessage());
+        return null;
     }
 
     private URI buildScanUri(String folderPath) {
@@ -113,6 +122,8 @@ public class NavidromeClient {
         return builder.build().toUri();
     }
 
+    @CircuitBreaker(name = "navidromeClient", fallbackMethod = "setRatingFallback")
+    @Retry(name = "navidromeClient")
     public void setRating(String navidromeId, int rating) {
         try {
             URI uri = buildSetRatingUri(navidromeId, rating);
@@ -127,10 +138,18 @@ public class NavidromeClient {
             log.info("✓ Successfully set rating {} for Navidrome track: {}", rating, navidromeId);
 
         } catch (Exception e) {
-            log.error("Failed to set rating for Navidrome track {}: {}", navidromeId, e.getMessage(), e);
+            log.error("Failed to set rating for Navidrome track {}: {}", navidromeId, e.getMessage());
+            throw e;
         }
     }
 
+    private void setRatingFallback(String navidromeId, int rating, Exception e) {
+        log.warn("Navidrome setRating fallback triggered for track {} with rating {}: {}",
+            navidromeId, rating, e.getMessage());
+    }
+
+    @CircuitBreaker(name = "navidromeClient", fallbackMethod = "findTrackIdByArtistAndTitleFallback")
+    @Retry(name = "navidromeClient")
     public String findTrackIdByArtistAndTitle(String artist, String title) {
         try {
             String query = artist + " " + title;
@@ -158,9 +177,15 @@ public class NavidromeClient {
             return null;
 
         } catch (Exception e) {
-            log.error("Failed to search track in Navidrome: {} - {}", artist, title, e);
-            return null;
+            log.error("Failed to search track in Navidrome: {} - {}", artist, title);
+            throw e;
         }
+    }
+
+    private String findTrackIdByArtistAndTitleFallback(String artist, String title, Exception e) {
+        log.warn("Navidrome findTrackIdByArtistAndTitle fallback triggered for {} - {}: {}",
+            artist, title, e.getMessage());
+        return null;
     }
 
     private URI buildSetRatingUri(String navidromeId, int rating) {

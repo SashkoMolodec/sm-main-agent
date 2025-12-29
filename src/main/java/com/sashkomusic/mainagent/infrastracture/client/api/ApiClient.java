@@ -1,6 +1,8 @@
 package com.sashkomusic.mainagent.infrastracture.client.api;
 
 import com.sashkomusic.mainagent.infrastracture.client.api.dto.TrackDto;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,8 @@ public class ApiClient {
                 .baseUrl(apiBaseUrl).build();
     }
 
+    @CircuitBreaker(name = "apiClient", fallbackMethod = "findTrackByArtistAndTitleFallback")
+    @Retry(name = "apiClient")
     public Optional<TrackDto> findTrackByArtistAndTitle(String artist, String title) {
         try {
             return Optional.ofNullable(restClient.get()
@@ -31,8 +35,14 @@ public class ApiClient {
                     .body(TrackDto.class));
         } catch (Exception e) {
             log.error("Failed to find track by artist '{}' and title '{}': {}", artist, title, e.getMessage());
-            return Optional.empty();
+            throw e;
         }
+    }
+
+    public Optional<TrackDto> findTrackByArtistAndTitleFallback(String artist, String title, Exception e) {
+        log.warn("ApiClient findTrackByArtistAndTitle fallback triggered for '{}' - '{}': {}",
+            artist, title, e.getMessage());
+        return Optional.empty();
     }
 }
 

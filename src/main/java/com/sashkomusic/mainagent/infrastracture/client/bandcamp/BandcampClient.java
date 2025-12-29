@@ -7,6 +7,8 @@ import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -33,6 +35,8 @@ public class BandcampClient implements SearchEngineService {
                 .build();
     }
 
+    @CircuitBreaker(name = "bandcampClient", fallbackMethod = "searchReleasesFallback")
+    @Retry(name = "bandcampClient")
     @Override
     public List<ReleaseMetadata> searchReleases(MetadataSearchRequest request) {
         String query = buildSearchQuery(request);
@@ -86,8 +90,14 @@ public class BandcampClient implements SearchEngineService {
 
         } catch (Exception ex) {
             log.error("Error searching Bandcamp: {}", ex.getMessage());
-            return List.of();
+            throw ex;
         }
+    }
+
+    public List<ReleaseMetadata> searchReleasesFallback(MetadataSearchRequest request, Exception e) {
+        log.warn("Bandcamp searchReleases fallback triggered for query '{}': {}",
+            buildSearchQuery(request), e.getMessage());
+        return List.of();
     }
 
     private String buildSearchQuery(MetadataSearchRequest request) {
@@ -370,6 +380,8 @@ public class BandcampClient implements SearchEngineService {
      * Get release metadata by URL.
      * Used for reprocessing - fetches fresh metadata from a known Bandcamp URL.
      */
+    @CircuitBreaker(name = "bandcampClient", fallbackMethod = "getReleaseByUrlFallback")
+    @Retry(name = "bandcampClient")
     public ReleaseMetadata getReleaseByUrl(String url) {
         log.info("Fetching release metadata from Bandcamp URL: {}", url);
 
@@ -429,6 +441,12 @@ public class BandcampClient implements SearchEngineService {
             log.error("Error fetching release from Bandcamp URL {}: {}", url, ex.getMessage());
             throw new RuntimeException("Failed to fetch Bandcamp release: " + ex.getMessage(), ex);
         }
+    }
+
+    public ReleaseMetadata getReleaseByUrlFallback(String url, Exception e) {
+        log.warn("Bandcamp getReleaseByUrl fallback triggered for URL '{}': {}",
+            url, e.getMessage());
+        return null;
     }
 
     private String extractArtistFromPage(Document doc) {
@@ -628,6 +646,8 @@ public class BandcampClient implements SearchEngineService {
         return tracks;
     }
 
+    @CircuitBreaker(name = "bandcampClient", fallbackMethod = "getTracksFallback")
+    @Retry(name = "bandcampClient")
     @Override
     public List<TrackMetadata> getTracks(String releaseId) {
         log.info("Fetching tracklist from Bandcamp for release ID: {}", releaseId);
@@ -696,8 +716,14 @@ public class BandcampClient implements SearchEngineService {
 
         } catch (Exception ex) {
             log.error("Error fetching tracklist from Bandcamp: {}", ex.getMessage());
-            return List.of();
+            throw ex;
         }
+    }
+
+    public List<TrackMetadata> getTracksFallback(String releaseId, Exception e) {
+        log.warn("Bandcamp getTracks fallback triggered for release ID '{}': {}",
+            releaseId, e.getMessage());
+        return List.of();
     }
 
     @Override

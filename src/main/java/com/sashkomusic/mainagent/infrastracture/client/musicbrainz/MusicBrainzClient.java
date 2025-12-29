@@ -7,11 +7,12 @@ import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.model.TrackMetadata;
 import com.sashkomusic.mainagent.domain.service.search.SearchEngineService;
 import com.sashkomusic.mainagent.infrastracture.client.musicbrainz.exception.SearchNotCompleteException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -81,11 +82,9 @@ public class MusicBrainzClient implements SearchEngineService {
         return self.searchByRelease(request.withAuthor(""));
     }
 
-    @Retryable(
-            retryFor = SearchNotCompleteException.class,
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 2000, multiplier = 2)
-    )
+    @CircuitBreaker(name = "musicBrainzClient", fallbackMethod = "searchByReleaseFallback")
+    @Retry(name = "musicBrainzClient")
+    @RateLimiter(name = "musicBrainzClient")
     protected List<ReleaseMetadata> searchByRelease(MetadataSearchRequest request) {
         String luceneQuery = toLuceneQuery(request);
         log.info("Searching MusicBrainz release endpoint with query: {}", luceneQuery);
@@ -114,11 +113,15 @@ public class MusicBrainzClient implements SearchEngineService {
         }
     }
 
-    @Retryable(
-            retryFor = SearchNotCompleteException.class,
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 2000, multiplier = 2)
-    )
+    protected List<ReleaseMetadata> searchByReleaseFallback(MetadataSearchRequest request, Exception e) {
+        log.warn("MusicBrainz searchByRelease fallback triggered for query '{}': {}",
+            toLuceneQuery(request), e.getMessage());
+        return List.of();
+    }
+
+    @CircuitBreaker(name = "musicBrainzClient", fallbackMethod = "searchByRecordingFallback")
+    @Retry(name = "musicBrainzClient")
+    @RateLimiter(name = "musicBrainzClient")
     protected List<ReleaseMetadata> searchByRecording(MetadataSearchRequest request) {
         String luceneQuery = toLuceneQuery(request);
         log.info("Searching MusicBrainz recording endpoint with query: {}", luceneQuery);
@@ -156,6 +159,12 @@ public class MusicBrainzClient implements SearchEngineService {
             log.warn("MusicBrainz recording API error (will retry): {}", ex.getMessage());
             throw new SearchNotCompleteException("Search failed due to API error.");
         }
+    }
+
+    protected List<ReleaseMetadata> searchByRecordingFallback(MetadataSearchRequest request, Exception e) {
+        log.warn("MusicBrainz searchByRecording fallback triggered for query '{}': {}",
+            toLuceneQuery(request), e.getMessage());
+        return List.of();
     }
 
     private MusicBrainzSearchResponse.Release convertToReleases(
@@ -406,14 +415,9 @@ public class MusicBrainzClient implements SearchEngineService {
         return "N/A";
     }
 
-    @Retryable(
-            maxAttempts = 3,
-            backoff = @Backoff(
-                    delay = 2000,      // 2 seconds
-                    multiplier = 2.0,  // exponential backoff
-                    maxDelay = 10000   // max 10 seconds
-            )
-    )
+    @CircuitBreaker(name = "musicBrainzClient", fallbackMethod = "getReleaseByIdFallback")
+    @Retry(name = "musicBrainzClient")
+    @RateLimiter(name = "musicBrainzClient")
     public ReleaseMetadata getReleaseById(String releaseId) {
         log.info("Fetching release metadata for ID: {}", releaseId);
 
@@ -483,6 +487,12 @@ public class MusicBrainzClient implements SearchEngineService {
             log.error("Error fetching release metadata (will retry): {}", ex.getMessage());
             throw ex;
         }
+    }
+
+    public ReleaseMetadata getReleaseByIdFallback(String releaseId, Exception e) {
+        log.warn("MusicBrainz getReleaseById fallback triggered for release ID '{}': {}",
+            releaseId, e.getMessage());
+        return null;
     }
 
     @Override

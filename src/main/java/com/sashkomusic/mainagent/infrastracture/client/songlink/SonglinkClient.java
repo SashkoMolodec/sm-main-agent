@@ -1,5 +1,7 @@
 package com.sashkomusic.mainagent.infrastracture.client.songlink;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -17,6 +19,8 @@ public class SonglinkClient {
                 .build();
     }
 
+    @CircuitBreaker(name = "songlinkClient", fallbackMethod = "getLinksFallback")
+    @Retry(name = "songlinkClient")
     public SonglinkResponse getLinks(String youtubeUrl) {
         log.info("Fetching streaming links from Songlink for YouTube URL: {}", youtubeUrl);
 
@@ -39,7 +43,13 @@ public class SonglinkClient {
 
         } catch (Exception ex) {
             log.error("Error fetching from Songlink API: {}", ex.getMessage());
-            return null;
+            throw ex;
         }
+    }
+
+    public SonglinkResponse getLinksFallback(String youtubeUrl, Exception e) {
+        log.warn("Songlink getLinks fallback triggered for URL '{}': {}",
+            youtubeUrl, e.getMessage());
+        return null;
     }
 }
