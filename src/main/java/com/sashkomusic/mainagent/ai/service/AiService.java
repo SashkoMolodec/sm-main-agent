@@ -84,9 +84,6 @@ public interface AiService {
             """)
     UserIntent classifyIntent(@UserMessage String text);
 
-    @SystemMessage("You are a cool music assistant. Answer briefly.")
-    String chat(@UserMessage String text);
-
     @SystemMessage("""
             You are an expert music librarian. Analyze download options and provide a SHORT summary.
 
@@ -120,28 +117,6 @@ public interface AiService {
                         @V("album") String album,
                         @V("tracklist") String tracklist,
                         @V("options") String options);
-
-    @SystemMessage("""
-            Parse user input to extract option number (for any selection: download, metadata, etc).
-            Support various formats:
-            - Just a digit: "1", "2", "3" (most common)
-            - Ukrainian words: "перший", "другий", "третій", "четвертий", "п'ятий"
-            - English words: "first", "second", "third", "fourth", "fifth"
-            - With prefix: "option 2", "варіант 3", "номер 4"
-
-            Examples:
-            "1" -> 1
-            "2" -> 2
-            "перший" -> 1
-            "другий" -> 2
-            "second" -> 2
-            "варіант 3" -> 3
-
-            Return the number as Integer (1-indexed).
-            Return null if no valid number found.
-            """)
-    @UserMessage("{{it}}")
-    Integer parseOptionNumber(String userInput);
 
     @SystemMessage("""
             Parse music folder name to extract artist, album, and ALL additional metadata filters.
@@ -480,108 +455,4 @@ public interface AiService {
         """)
     @UserMessage("{{it}}")
     MetadataSearchRequest buildSearchRequest(String userPrompt);
-
-    @SystemMessage("""
-        Parse additional search filters from text (typically from parentheses in folder name).
-        Extract ONLY filter parameters - do NOT try to extract artist/release/recording.
-
-        AVAILABLE FILTER FIELDS:
-        - dateRange: Year or year range
-          - Single year: "2013" -> {from: 2013, to: 2013}
-          - Range: "90s" -> {from: 1990, to: 1999}
-          - "1980-1990" -> {from: 1980, to: 1990}
-        - format: Vinyl | CD | Cassette | Digital Media | File
-          - Recognize: vinyl, вініл, платівка, грамплатівка
-          - Recognize: cd, диск, компакт-диск
-          - Recognize: cassette, kaseta, касета, tape, плівка
-          - Recognize: digital, цифра, файл
-        - type: Album | EP | Single | Compilation
-        - country: ISO 2-letter country code (US, GB, DE, FR, JP, UA, etc)
-          - Recognize: ukraine, україна, ukrainian -> UA
-          - Recognize: usa, америка, american -> US
-          - Recognize: uk, britain, англія, british -> GB
-          - Recognize: germany, німеччина, german -> DE
-        - status: Official | Bootleg | Promotion
-        - style: Genre/style/tag (techno, ambient, rock, idm, etc)
-        - label: Record label name
-        - catno: Catalog number (e.g. "AX-009")
-
-        RULES:
-        1. Extract ONLY filter parameters listed above
-        2. Leave artist, release, recording as EMPTY strings
-        3. Multiple filters can be comma-separated: "kaseta, 1990, україна"
-        4. Be flexible with format names (vinyl = вініл = платівка)
-        5. Detect language from input (UA or EN)
-        6. If field not found, use empty string (or null for dateRange)
-
-        Return ONLY valid JSON without any markdown formatting or code blocks.
-        DO NOT wrap JSON in ```json or ``` blocks.
-
-        EXAMPLES:
-        Input: "kaseta, 1990"
-        Output: {
-          "artist": "",
-          "release": "",
-          "recording": "",
-          "dateRange": {"from": 1990, "to": 1990},
-          "format": "Cassette",
-          "type": "",
-          "country": "",
-          "status": "",
-          "style": "",
-          "label": "",
-          "catno": "",
-          "language": "EN"
-        }
-
-        Input: "вініл, 1985-1990, україна"
-        Output: {
-          "artist": "",
-          "release": "",
-          "recording": "",
-          "dateRange": {"from": 1985, "to": 1990},
-          "format": "Vinyl",
-          "type": "",
-          "country": "UA",
-          "status": "",
-          "style": "",
-          "label": "",
-          "catno": "",
-          "language": "UA"
-        }
-
-        Input: "cd, 2000, warp records"
-        Output: {
-          "artist": "",
-          "release": "",
-          "recording": "",
-          "dateRange": {"from": 2000, "to": 2000},
-          "format": "CD",
-          "type": "",
-          "country": "",
-          "status": "",
-          "style": "",
-          "label": "warp records",
-          "catno": "",
-          "language": "EN"
-        }
-
-        Input: "ep, techno, 1995"
-        Output: {
-          "artist": "",
-          "release": "",
-          "recording": "",
-          "dateRange": {"from": 1995, "to": 1995},
-          "format": "",
-          "type": "EP",
-          "country": "",
-          "status": "",
-          "style": "techno",
-          "label": "",
-          "catno": "",
-          "language": "EN"
-        }
-        """)
-    @UserMessage("{{it}}")
-    MetadataSearchRequest parseAdditionalFilters(String filtersText);
 }
