@@ -44,7 +44,7 @@ public class ProcessFolderFlowService {
     private final PathMappingService pathMappingService;
     private final com.sashkomusic.mainagent.domain.service.download.DownloadContextHolder downloadContextHolder;
 
-    @Value("${downloads.base-path:/Users/okravch/my/sm/sm-download-agent/downloads}")
+    @Value("${downloads.base-path:/Users/okravch/my/sm/downloads}")
     private String downloadsBasePath;
 
     private static final Set<String> AUDIO_EXTENSIONS = Set.of(

@@ -33,6 +33,7 @@ public class ReleaseSearchFlowService {
 
             var releases = searchEngines.get(engine).searchReleases(searchRequest);
             if (!releases.isEmpty()) {
+                contextService.saveSearchContext(chatId, engine, rawInput, searchRequest, releases);
                 return buildPageResponse(chatId, 0);
             }
         }
