@@ -28,6 +28,7 @@ import java.util.Map;
 @Component
 @Slf4j
 public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleThreadUpdateConsumer {
+    private static final int MAX_TEXT_LENGTH = 4096;
     private final UserInteractionOrchestrator orchestrator;
     private final TelegramClient client;
     private final String botToken;
@@ -129,7 +130,14 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
     }
 
     public void sendMessage(long chatId, String text) {
-        sendResponse(chatId, BotResponse.text(text));
+        if (text != null && text.length() > MAX_TEXT_LENGTH) {
+            List<String> chunks = splitTextIntoChunks(text, MAX_TEXT_LENGTH);
+            for (String chunk : chunks) {
+                sendResponse(chatId, BotResponse.text(chunk));
+            }
+        } else {
+            sendResponse(chatId, BotResponse.text(text));
+        }
     }
 
     private InlineKeyboardMarkup createKeyboard(Map<String, String> buttons, List<List<BotResponse.ButtonDto>> buttonRows) {
@@ -176,5 +184,33 @@ public class TelegramChatBot implements SpringLongPollingBot, LongPollingSingleT
         } catch (TelegramApiException e) {
             log.warn("⚠️ Could not answer callback: {}", e.getMessage());
         }
+    }
+
+    private List<String> splitTextIntoChunks(String text, int maxLength) {
+        List<String> chunks = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return chunks;
+        }
+
+        String remaining = text;
+        while (remaining.length() > maxLength) {
+            int splitIndex = maxLength;
+
+            // Try to find a newline character before the limit
+            int lastNewline = remaining.lastIndexOf('\n', maxLength);
+            if (lastNewline > 0 && lastNewline > maxLength * 0.5) {
+                // Use newline if it's not too far back (at least 50% of maxLength)
+                splitIndex = lastNewline;
+            }
+
+            chunks.add(remaining.substring(0, splitIndex));
+            remaining = remaining.substring(splitIndex).stripLeading();
+        }
+
+        if (!remaining.isEmpty()) {
+            chunks.add(remaining);
+        }
+
+        return chunks;
     }
 }

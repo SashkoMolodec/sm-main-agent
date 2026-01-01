@@ -26,6 +26,20 @@ public class ReleaseSearchFlowService {
     private final Map<SearchEngine, SearchEngineService> searchEngines;
     private final SearchContextService contextService;
 
+    public List<BotResponse> searchDefault(long chatId, String rawInput) {
+        var searchRequest = analyzer.buildSearchRequest(rawInput);
+        for (SearchEngine engine : SearchEngine.values()) {
+            log.info("Trying to search in {}", engine);
+
+            var releases = searchEngines.get(engine).searchReleases(searchRequest);
+            if (!releases.isEmpty()) {
+                return buildPageResponse(chatId, 0);
+            }
+        }
+        var buttons = buildEmptyResultsButtons(searchRequest);
+        return List.of(BotResponse.withButtons("😔 нич не знайшов.", buttons));
+    }
+
     public List<BotResponse> search(long chatId, String rawInput, SearchEngine searchEngine) {
         log.info("Searching with engine: {}", searchEngine);
         var searchRequest = analyzer.buildSearchRequest(rawInput);
@@ -55,7 +69,7 @@ public class ReleaseSearchFlowService {
         }
     }
 
-    public SearchResult searchWithFallback(String query,SearchEngine... engines) {
+    public SearchResult searchWithFallback(String query, SearchEngine... engines) {
         var searchRequest = analyzer.buildSearchRequest(query);
 
         for (SearchEngine engine : engines) {

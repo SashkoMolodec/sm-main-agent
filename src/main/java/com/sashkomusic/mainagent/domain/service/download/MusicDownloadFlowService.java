@@ -25,7 +25,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MusicDownloadFlowService {
 
-    private final AiService aiService;
     private final SearchFilesTaskProducer searchFilesProducer;
     private final DownloadTaskProducer downloadTaskProducer;
     private final SearchContextService contextService;

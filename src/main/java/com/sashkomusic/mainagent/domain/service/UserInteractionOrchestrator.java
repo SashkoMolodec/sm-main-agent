@@ -47,7 +47,7 @@ public class UserInteractionOrchestrator {
         log.info("Identified intent: {}", intent);
 
         return switch (intent) {
-            case SEARCH_FOR_RELEASE_DEFAULT -> releaseSearchFlowService.search(chatId, rawInput, MUSICBRAINZ);
+            case SEARCH_FOR_RELEASE_DEFAULT -> releaseSearchFlowService.searchDefault(chatId, rawInput);
             case SEARCH_FOR_RELEASE_DISCOGS -> releaseSearchFlowService.search(chatId, rawInput, DISCOGS);
             case SEARCH_FOR_RELEASE_BANDCAMP -> releaseSearchFlowService.search(chatId, rawInput, BANDCAMP);
             case DIG_DEEPER -> releaseSearchFlowService.switchStrategyAndSearch(chatId);
