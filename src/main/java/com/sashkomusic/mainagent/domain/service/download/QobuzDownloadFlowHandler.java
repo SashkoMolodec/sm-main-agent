@@ -47,8 +47,16 @@ public class QobuzDownloadFlowHandler implements DownloadFlowHandler {
     }
 
     @Override
-    public Optional<DownloadEngine> getFallbackDownloadEngine() {
-        return Optional.of(DownloadEngine.SOULSEEK);
+    public BotResponse buildAutoDownloadResponse(DownloadOption option, String releaseId) {
+        String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
+
+        var buttons = new LinkedHashMap<String, String>();
+        buttons.put("❌", "CANCEL_DL:" + releaseId);
+        buttons.put("🍏", "SEARCH_ALT:" + releaseId + ":APPLE_MUSIC");
+        buttons.put("📼", "SEARCH_ALT:" + releaseId + ":BANDCAMP");
+        buttons.put("⛏️", "SEARCH_ALT:" + releaseId + ":SOULSEEK");
+
+        return BotResponse.withButtons(message, buttons);
     }
 
     private int getQualityPriority(OptionReport report) {

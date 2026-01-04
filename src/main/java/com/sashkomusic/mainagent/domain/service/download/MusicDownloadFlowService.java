@@ -1,6 +1,5 @@
 package com.sashkomusic.mainagent.domain.service.download;
 
-import com.sashkomusic.mainagent.ai.service.AiService;
 import com.sashkomusic.mainagent.api.telegram.dto.BotResponse;
 import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.ReleaseMetadata;
@@ -8,8 +7,10 @@ import com.sashkomusic.mainagent.domain.model.SearchEngine;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import com.sashkomusic.mainagent.domain.service.search.SearchContextService;
 import com.sashkomusic.mainagent.messaging.consumer.dto.SearchFilesResultDto;
+import com.sashkomusic.mainagent.messaging.producer.dto.DownloadCancelTaskDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.DownloadFilesTaskDto;
 import com.sashkomusic.mainagent.messaging.producer.dto.SearchFilesTaskDto;
+import com.sashkomusic.mainagent.messaging.producer.DownloadCancelTaskProducer;
 import com.sashkomusic.mainagent.messaging.producer.DownloadTaskProducer;
 import com.sashkomusic.mainagent.messaging.producer.SearchFilesTaskProducer;
 import lombok.RequiredArgsConstructor;
@@ -27,12 +28,13 @@ public class MusicDownloadFlowService {
 
     private final SearchFilesTaskProducer searchFilesProducer;
     private final DownloadTaskProducer downloadTaskProducer;
+    private final DownloadCancelTaskProducer downloadCancelTaskProducer;
     private final SearchContextService contextService;
     private final DownloadContextHolder downloadContextHolder;
     private final ReleaseSearchFlowService releaseSearchFlowService;
     private final Map<DownloadEngine, DownloadFlowHandler> downloadFlowHandlers;
 
-    public List<BotResponse> handleCallback(long chatId, String data) {
+    public List<BotResponse> handleDownload(long chatId, String data) {
         if (data.startsWith("DL:")) {
             String releaseId = data.substring(3);
             log.info("User selected release ID: {}", releaseId);
@@ -42,26 +44,6 @@ public class MusicDownloadFlowService {
                 return List.of(BotResponse.text("❌ шось ся не получило...найди реліз ше раз"));
             }
             return initiateDefaultDownloadSearch(chatId, metadata);
-        }
-
-        if (data.startsWith("SEARCH_ALT:")) {
-            int lastColonIndex = data.lastIndexOf(':');
-            if (lastColonIndex == -1 || lastColonIndex <= "SEARCH_ALT:".length()) {
-                return List.of(BotResponse.text("❌ шось не то з командою"));
-            }
-
-            String releaseId = data.substring("SEARCH_ALT:".length(), lastColonIndex);
-            String sourceName = data.substring(lastColonIndex + 1);
-
-            log.info("Alternative search requested: releaseId={}, source={}", releaseId, sourceName);
-
-            ReleaseMetadata metadata = contextService.getReleaseMetadata(releaseId);
-            if (metadata == null) {
-                return List.of(BotResponse.text("❌ шось ся не получило...найди реліз ше раз"));
-            }
-
-            var source = DownloadEngine.valueOf(sourceName);
-            return initiateDownloadSearch(chatId, metadata, source);
         }
 
         return List.of(BotResponse.text("тєжко."));
@@ -104,13 +86,6 @@ public class MusicDownloadFlowService {
         return List.of(flowHandler.buildSearchResultsResponse(text, dto.releaseId(), dto.source()));
     }
 
-    private List<BotResponse> handleFallback(SearchFilesResultDto dto, DownloadFlowHandler flowHandler) {
-        if (flowHandler.getFallbackDownloadEngine().isPresent()) {
-            return initiateDownloadSearch(dto.chatId(), contextService.getReleaseMetadata(dto.releaseId()), flowHandler.getFallbackDownloadEngine().get());
-        }
-        return List.of(BotResponse.text(DownloadOptionsCardFormatter.format(List.of(), "")));
-    }
-
     private List<BotResponse> autoDownload(SearchFilesResultDto dto, List<DownloadFlowHandler.OptionReport> reports) {
         var chosenReport = reports.getFirst();
         var option = chosenReport.option();
@@ -118,8 +93,8 @@ public class MusicDownloadFlowService {
         log.info("Auto-downloading from {}: {}", option.source(), option.displayName());
         downloadTaskProducer.send(DownloadFilesTaskDto.of(dto.chatId(), dto.releaseId(), option));
 
-        String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
-        return List.of(BotResponse.text(message));
+        var flowHandler = downloadFlowHandlers.get(option.source());
+        return List.of(flowHandler.buildAutoDownloadResponse(option, dto.releaseId()));
     }
 
     public List<BotResponse> handleDownloadOption(long chatId, String rawInput) {
@@ -176,5 +151,35 @@ public class MusicDownloadFlowService {
         responses.addAll(initiateDefaultDownloadSearch(chatId, selectedRelease));
 
         return responses;
+    }
+
+    public List<BotResponse> handleDownloadCancel(long chatId, String data) {
+        String releaseId = data.substring("CANCEL_DL:".length());
+        log.info("User requested cancel for releaseId={}", releaseId);
+
+        downloadCancelTaskProducer.send(DownloadCancelTaskDto.of(chatId, releaseId));
+
+        return List.of(BotResponse.text("⏳ **скасовую...**"));
+    }
+
+
+    public List<BotResponse> handleSearchAlternative(long chatId, String data) {
+        int lastColonIndex = data.lastIndexOf(':');
+        if (lastColonIndex == -1 || lastColonIndex <= "SEARCH_ALT:".length()) {
+            return List.of(BotResponse.text("❌ шось не то з командою"));
+        }
+
+        String releaseId = data.substring("SEARCH_ALT:".length(), lastColonIndex);
+        String sourceName = data.substring(lastColonIndex + 1);
+
+        log.info("Alternative search requested: releaseId={}, source={}", releaseId, sourceName);
+
+        ReleaseMetadata metadata = contextService.getReleaseMetadata(releaseId);
+        if (metadata == null) {
+            return List.of(BotResponse.text("❌ шось ся не получило...найди реліз ше раз"));
+        }
+
+        var source = DownloadEngine.valueOf(sourceName);
+        return initiateDownloadSearch(chatId, metadata, source);
     }
 }

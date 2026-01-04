@@ -115,85 +115,6 @@ public class ProcessFolderFlowService {
         return new FolderResolveResult(cleanedFolderName, folderPath);
     }
 
-    private List<BotResponse> validateFolder(Path folderPath) {
-        if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
-            return List.of(BotResponse.text("❌ папка не знайдена: `" + folderPath + "`"));
-        }
-        return null;
-    }
-
-    private MetadataSearchRequest buildSearchRequest(String folderName, List<String> audioFiles, String additionalContext) {
-        var releaseInfoFromTags = identifierService.identifyFromAudioFile(audioFiles.getFirst());
-
-        if (releaseInfoFromTags != null) {
-            log.info("Using release info from audio file tags");
-            return MetadataSearchRequest.create(
-                    null, withAdditionalContext(releaseInfoFromTags.album(), additionalContext),
-                    null, null, null, null, null, null, null, null, null, Language.EN);
-        }
-
-        log.info("No tags in audio file, parsing folder name");
-        return identifierService.identifyFromFolderName(withAdditionalContext(folderName, additionalContext));
-    }
-
-    private static String withAdditionalContext(String filterValue, String additionalContext) {
-        return filterValue + " " + additionalContext;
-    }
-
-    private List<BotResponse> validateSearchRequest(MetadataSearchRequest searchRequest, String folderName) {
-        if (searchRequest == null || searchRequest.release().isEmpty()) {
-            return List.of(BotResponse.text(String.format("""
-                    ❌ не вдалося розпізнати назву релізу з папки: `%s`
-                    
-                    допиши контексту:
-                    • /process Artist - Album
-                    • /process Artist - Album касета 1990 україна
-                    """, folderName)));
-        }
-        return null;
-    }
-
-    private SearchResults searchAllSources(MetadataSearchRequest searchRequest) {
-        String title = searchRequest.getTitle();
-
-        return new SearchResults(
-                searchSource(() -> musicBrainzClient.searchReleases(searchRequest), title, 4),
-                searchSource(() -> discogsClient.searchReleases(searchRequest), title, 4),
-                searchSource(() -> bandcampClient.searchReleases(searchRequest), title, 3)
-        );
-    }
-
-    private void saveSearchContext(long chatId, String folderName, MetadataSearchRequest searchRequest,
-                                   SearchResults searchResults, Path folderPath, List<String> audioFiles) {
-        List<ReleaseMetadata> allResults = searchResults.allResults();
-
-        SearchEngine primarySource = !searchResults.mbResults().isEmpty() ? MUSICBRAINZ :
-                (!searchResults.discogsResults().isEmpty() ? DISCOGS : BANDCAMP);
-
-        searchContextService.saveSearchContext(chatId, primarySource, folderName, searchRequest, allResults);
-        storeSearchResults(chatId, allResults);
-        storeChatContext(chatId, folderPath, audioFiles);
-    }
-
-    private record FolderResolveResult(String name, Path path) {
-    }
-
-    private record SearchResults(List<ReleaseMetadata> mbResults,
-                                 List<ReleaseMetadata> discogsResults,
-                                 List<ReleaseMetadata> bandcampResults) {
-        List<ReleaseMetadata> allResults() {
-            List<ReleaseMetadata> all = new ArrayList<>();
-            all.addAll(mbResults);
-            all.addAll(discogsResults);
-            all.addAll(bandcampResults);
-            return all;
-        }
-
-        boolean isEmpty() {
-            return allResults().isEmpty();
-        }
-    }
-
     public List<BotResponse> handleMetadataSelection(long chatId, String rawInput) {
         String trimmedInput = rawInput.trim();
 
@@ -257,6 +178,134 @@ public class ProcessFolderFlowService {
         return List.of(BotResponse.text("🚀 опрацьовую..."));
     }
 
+    public boolean hasActiveContext(long chatId) {
+        return contextHolder.getChatContextKey(chatId) != null;
+    }
+
+    private List<BotResponse> validateFolder(Path folderPath) {
+        if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
+            return List.of(BotResponse.text("❌ папка не знайдена: `" + folderPath + "`"));
+        }
+        return null;
+    }
+
+    private MetadataSearchRequest buildSearchRequest(String folderName, List<String> audioFiles, String additionalContext) {
+        var releaseInfoFromTags = identifierService.identifyFromAudioFile(audioFiles.getFirst());
+
+        if (releaseInfoFromTags != null) {
+            log.info("Using release info from audio file tags");
+
+            String artist = extractMostCommonArtist(audioFiles);
+
+            log.info("Found majority artist from tags: '{}'", artist);
+            return MetadataSearchRequest.create(
+                    artist, withAdditionalContext(releaseInfoFromTags.album(), additionalContext),
+                    null, null, null, null, null, null, null, null, null, Language.EN);
+        }
+
+        log.info("No tags in audio file, parsing folder name");
+        return identifierService.identifyFromFolderName(withAdditionalContext(folderName, additionalContext));
+    }
+
+    private String extractMostCommonArtist(List<String> audioFiles) {
+        java.util.Map<String, Integer> artistCounts = new java.util.HashMap<>();
+        int totalFilesWithArtist = 0;
+
+        for (String audioFile : audioFiles) {
+            var releaseInfo = identifierService.identifyFromAudioFile(audioFile);
+            if (releaseInfo != null && releaseInfo.artist() != null && !releaseInfo.artist().isBlank()) {
+                String artist = releaseInfo.artist().trim();
+                artistCounts.put(artist, artistCounts.getOrDefault(artist, 0) + 1);
+                totalFilesWithArtist++;
+            }
+        }
+
+        if (artistCounts.isEmpty()) {
+            log.debug("No artist tags found in any audio files");
+            return null;
+        }
+
+        var mostCommonEntry = artistCounts.entrySet().stream()
+                .max(java.util.Map.Entry.comparingByValue())
+                .orElse(null);
+
+        if (mostCommonEntry == null) {
+            return null;
+        }
+
+        String mostCommonArtist = mostCommonEntry.getKey();
+        int count = mostCommonEntry.getValue();
+        double percentage = (double) count / totalFilesWithArtist * 100;
+
+        log.info("Most common artist: '{}' ({} of {} tracks, {}%)",
+                mostCommonArtist, count, totalFilesWithArtist, String.format("%.1f", percentage));
+
+        if (percentage >= 50.0) {
+            return mostCommonArtist;
+        } else {
+            log.info("Most common artist appears in <50% of tracks, treating as compilation");
+            return null;
+        }
+    }
+
+    private static String withAdditionalContext(String filterValue, String additionalContext) {
+        return filterValue + " " + additionalContext;
+    }
+
+    private List<BotResponse> validateSearchRequest(MetadataSearchRequest searchRequest, String folderName) {
+        if (searchRequest == null || searchRequest.release().isEmpty()) {
+            return List.of(BotResponse.text(String.format("""
+                    ❌ не вдалося розпізнати назву релізу з папки: `%s`
+                    
+                    допиши контексту:
+                    • /process Artist - Album
+                    • /process Artist - Album касета 1990 україна
+                    """, folderName)));
+        }
+        return null;
+    }
+
+    private SearchResults searchAllSources(MetadataSearchRequest searchRequest) {
+        String title = searchRequest.getTitle();
+
+        return new SearchResults(
+                searchSource(() -> musicBrainzClient.searchReleases(searchRequest), title, 4),
+                searchSource(() -> discogsClient.searchReleases(searchRequest), title, 4),
+                searchSource(() -> bandcampClient.searchReleases(searchRequest), title, 3)
+        );
+    }
+
+    private void saveSearchContext(long chatId, String folderName, MetadataSearchRequest searchRequest,
+                                   SearchResults searchResults, Path folderPath, List<String> audioFiles) {
+        List<ReleaseMetadata> allResults = searchResults.allResults();
+
+        SearchEngine primarySource = !searchResults.mbResults().isEmpty() ? MUSICBRAINZ :
+                (!searchResults.discogsResults().isEmpty() ? DISCOGS : BANDCAMP);
+
+        searchContextService.saveSearchContext(chatId, primarySource, folderName, searchRequest, allResults);
+        storeSearchResults(chatId, allResults);
+        storeChatContext(chatId, folderPath, audioFiles);
+    }
+
+    private record FolderResolveResult(String name, Path path) {
+    }
+
+    private record SearchResults(List<ReleaseMetadata> mbResults,
+                                 List<ReleaseMetadata> discogsResults,
+                                 List<ReleaseMetadata> bandcampResults) {
+        List<ReleaseMetadata> allResults() {
+            List<ReleaseMetadata> all = new ArrayList<>();
+            all.addAll(mbResults);
+            all.addAll(discogsResults);
+            all.addAll(bandcampResults);
+            return all;
+        }
+
+        boolean isEmpty() {
+            return allResults().isEmpty();
+        }
+    }
+
     private static boolean additionalContextIncluded(String trimmedInput) {
         return trimmedInput.startsWith("+");
     }
@@ -267,10 +316,6 @@ public class ProcessFolderFlowService {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    public boolean hasActiveContext(long chatId) {
-        return contextHolder.getChatContextKey(chatId) != null;
     }
 
     private void storeChatContext(long chatId, Path folderPath, List<String> audioFiles) {

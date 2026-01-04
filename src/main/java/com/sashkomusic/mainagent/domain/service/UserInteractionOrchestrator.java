@@ -9,7 +9,6 @@ import com.sashkomusic.mainagent.domain.service.process.ProcessFolderFlowService
 import com.sashkomusic.mainagent.domain.service.process.ReprocessReleasesFlowService;
 import com.sashkomusic.mainagent.domain.service.search.ReleaseSearchFlowService;
 import com.sashkomusic.mainagent.domain.service.streaming.StreamingFlowService;
-import com.sashkomusic.mainagent.infrastracture.client.navidrome.NavidromeClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,7 +18,6 @@ import java.util.List;
 
 import static com.sashkomusic.mainagent.domain.model.SearchEngine.BANDCAMP;
 import static com.sashkomusic.mainagent.domain.model.SearchEngine.DISCOGS;
-import static com.sashkomusic.mainagent.domain.model.SearchEngine.MUSICBRAINZ;
 
 @Service
 @RequiredArgsConstructor
@@ -61,8 +59,14 @@ public class UserInteractionOrchestrator {
         if (data.startsWith("PAGE:")) {
             return releaseSearchFlowService.handlePageCallback(chatId, data);
         }
-        if (data.startsWith("DL:") || data.startsWith("SEARCH_ALT:")) {
-            return musicDownloadFlowService.handleCallback(chatId, data);
+        if (data.startsWith("CANCEL_DL:")) {
+            return musicDownloadFlowService.handleDownloadCancel(chatId, data);
+        }
+        if (data.startsWith("SEARCH_ALT:")) {
+            return musicDownloadFlowService.handleSearchAlternative(chatId, data);
+        }
+        if (data.startsWith("DL:")) {
+            return musicDownloadFlowService.handleDownload(chatId, data);
         }
         if (data.equals("DIG_DEEPER")) {
             return releaseSearchFlowService.switchStrategyAndSearch(chatId);

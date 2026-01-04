@@ -5,8 +5,8 @@ import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Optional;
 
 @Component
 public class BandcampDownloadFlowHandler implements DownloadFlowHandler {
@@ -35,7 +35,12 @@ public class BandcampDownloadFlowHandler implements DownloadFlowHandler {
     }
 
     @Override
-    public Optional<DownloadEngine> getFallbackDownloadEngine() {
-        return Optional.empty();
+    public BotResponse buildAutoDownloadResponse(DownloadOption option, String releaseId) {
+        String message = "✅ **знайшов то шо треба, для душі, качаю:**\n`%s`".formatted(option.displayName());
+
+        var buttons = new LinkedHashMap<String, String>();
+        buttons.put("❌", "CANCEL_DL:" + releaseId);
+
+        return BotResponse.withButtons(message, buttons);
     }
 }

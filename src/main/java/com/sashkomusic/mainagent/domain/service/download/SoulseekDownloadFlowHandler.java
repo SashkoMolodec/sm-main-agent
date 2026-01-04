@@ -67,8 +67,8 @@ public class SoulseekDownloadFlowHandler implements DownloadFlowHandler {
     }
 
     @Override
-    public Optional<DownloadEngine> getFallbackDownloadEngine() {
-        return Optional.empty();
+    public BotResponse buildAutoDownloadResponse(DownloadOption option, String releaseId) {
+        return BotResponse.text("not supported");
     }
 
     @NotNull

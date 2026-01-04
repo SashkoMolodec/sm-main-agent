@@ -5,7 +5,6 @@ import com.sashkomusic.mainagent.domain.model.DownloadEngine;
 import com.sashkomusic.mainagent.domain.model.DownloadOption;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface DownloadFlowHandler {
 
@@ -15,7 +14,7 @@ public interface DownloadFlowHandler {
 
     String formatDownloadConfirmation(DownloadOption option);
 
-    Optional<DownloadEngine> getFallbackDownloadEngine();
+    BotResponse buildAutoDownloadResponse(DownloadOption option, String releaseId);
 
     record OptionReport(
             DownloadOption option,
